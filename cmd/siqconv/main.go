@@ -2,21 +2,15 @@
 package main
 
 import (
-	"bytes"
-	"crypto/rand"
 	"errors"
 	"flag"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 
 	"siq_converter/internal/archive"
-	"siq_converter/internal/scaffold"
-	"siq_converter/internal/siqxml"
-	"siq_converter/internal/siqyaml"
+	"siq_converter/internal/ops"
 )
 
 const usage = `siqconv converts SIGame question packages (.siq) to YAML folders and back.
@@ -64,7 +58,7 @@ func run(args []string) error {
 		if out != "" {
 			return errors.New("init: expected 1 argument")
 		}
-		if err := scaffold.Init(in); err != nil {
+		if err := ops.Init(in); err != nil {
 			return err
 		}
 		fmt.Printf("created %s: edit %s, add the media files it lists, then run: siqconv pack %s\n", in, filepath.Join(in, archive.ContentYAML), in)
@@ -77,12 +71,14 @@ func run(args []string) error {
 		if strings.EqualFold(filepath.Ext(in), ".siq") {
 			return unpack(in, out, *force)
 		}
-		if filepath.Base(in) == archive.ContentYAML {
-			in = filepath.Dir(in)
-		}
 		return pack(in, out, *force)
 	case "verify":
-		return verify(in)
+		summary, err := ops.Verify(in)
+		if err != nil {
+			return err
+		}
+		fmt.Println(summary)
+		return nil
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 		return nil
@@ -92,184 +88,29 @@ func run(args []string) error {
 }
 
 func unpack(in, out string, force bool) error {
-	if out == "" {
-		out = strings.TrimSuffix(in, filepath.Ext(in))
-	}
-	b, err := archive.ReadSIQ(in)
+	res, err := ops.Unpack(in, out, force)
 	if err != nil {
-		return err
+		return withForceHint(err)
 	}
-	if force {
-		if err := os.RemoveAll(out); err != nil {
-			return err
-		}
-	}
-	if err := archive.WriteDir(out, b); err != nil {
-		return err
-	}
-	fmt.Printf("unpacked %s -> %s (%d files)\n", in, out, len(b.Files))
+	fmt.Printf("unpacked %s -> %s (%d files)\n", in, res.Out, res.Files)
 	return nil
 }
 
 func pack(in, out string, force bool) error {
-	in = filepath.Clean(in)
-	if out == "" {
-		out = in + ".siq"
-	}
-	if !force {
-		if _, err := os.Stat(out); err == nil {
-			return fmt.Errorf("%s already exists (use -f to overwrite)", out)
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-	}
-	b, err := archive.ReadDir(in)
+	res, err := ops.Pack(in, out, force)
 	if err != nil {
-		return err
+		return withForceHint(err)
 	}
-	warnings, err := archive.Check(b)
-	if err != nil {
-		return err
-	}
-	for _, w := range warnings {
+	for _, w := range res.Warnings {
 		fmt.Fprintln(os.Stderr, "warning:", w)
 	}
-	if b.Package.ID == "" {
-		b.Package.ID = newUUID()
-	}
-	if err := archive.WriteSIQ(out, b); err != nil {
-		return err
-	}
-	fmt.Printf("packed %s -> %s (%d files)\n", in, out, len(b.Files))
+	fmt.Printf("packed %s -> %s (%d files)\n", in, res.Out, res.Files)
 	return nil
 }
 
-// verify runs the full round trip .siq -> folder -> .siq in a temp directory
-// and compares content and files.
-func verify(in string) error {
-	orig, err := archive.ReadSIQ(in)
-	if err != nil {
-		return err
+func withForceHint(err error) error {
+	if errors.Is(err, ops.ErrExists) {
+		return fmt.Errorf("%w (use -f to overwrite)", err)
 	}
-	origXML, err := archive.ReadContentXML(in)
-	if err != nil {
-		return err
-	}
-	var problems []string
-	fail := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
-
-	// YAML writer is idempotent and the model survives YAML.
-	y1, err := siqyaml.Encode(orig.Package)
-	if err != nil {
-		return err
-	}
-	p2, err := siqyaml.Decode(y1)
-	if err != nil {
-		return fmt.Errorf("re-reading generated YAML: %w", err)
-	}
-	if !reflect.DeepEqual(orig.Package, p2) {
-		fail("package model changed after YAML round trip")
-	}
-	if y2, _ := siqyaml.Encode(p2); !bytes.Equal(y1, y2) {
-		fail("YAML output is not stable")
-	}
-
-	// Full trip through the file system.
-	tmp, err := os.MkdirTemp("", "siqconv-verify-")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tmp)
-	dir := filepath.Join(tmp, "pkg")
-	if err := archive.WriteDir(dir, orig); err != nil {
-		return err
-	}
-	fromDir, err := archive.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-	if _, err := archive.Check(fromDir); err != nil {
-		fail("%v", err)
-	}
-	outSIQ := filepath.Join(tmp, "out.siq")
-	if err := archive.WriteSIQ(outSIQ, fromDir); err != nil {
-		return err
-	}
-	back, err := archive.ReadSIQ(outSIQ)
-	if err != nil {
-		return fmt.Errorf("re-reading generated .siq: %w", err)
-	}
-	if !reflect.DeepEqual(orig.Package, back.Package) {
-		fail("package model changed after .siq round trip")
-	}
-
-	// Model-independent comparison of the XML.
-	newXML, err := archive.ReadContentXML(outSIQ)
-	if err != nil {
-		return err
-	}
-	c1, err := siqxml.Canonical(origXML)
-	if err != nil {
-		return err
-	}
-	c2, err := siqxml.Canonical(newXML)
-	if err != nil {
-		return err
-	}
-	if c1 != c2 {
-		fail("content.xml differs:\n%s", firstDiff(c1, c2))
-	}
-
-	// Files must be byte-identical.
-	want := map[string]string{}
-	for _, f := range orig.Files {
-		want[f.Path] = archive.Hash(f.Data)
-	}
-	got := map[string]string{}
-	for _, f := range back.Files {
-		got[f.Path] = archive.Hash(f.Data)
-	}
-	for p, h := range want {
-		if got[p] == "" {
-			fail("file lost: %s", p)
-		} else if got[p] != h {
-			fail("file changed: %s", p)
-		}
-	}
-	for p := range got {
-		if want[p] == "" {
-			fail("unexpected file: %s", p)
-		}
-	}
-
-	if len(problems) > 0 {
-		return fmt.Errorf("verify failed:\n- %s", strings.Join(problems, "\n- "))
-	}
-	fmt.Printf("OK: %s round-trips losslessly (%d rounds, %d files)\n", in, len(orig.Package.Rounds), len(orig.Files))
-	return nil
-}
-
-func firstDiff(a, b string) string {
-	al, bl := strings.Split(a, "\n"), strings.Split(b, "\n")
-	for i := 0; i < len(al) || i < len(bl); i++ {
-		var x, y string
-		if i < len(al) {
-			x = al[i]
-		}
-		if i < len(bl) {
-			y = bl[i]
-		}
-		if x != y {
-			return fmt.Sprintf("  line %d\n  original:  %s\n  converted: %s", i+1, x, y)
-		}
-	}
-	return ""
-}
-
-func newUUID() string {
-	var u [16]byte
-	_, _ = rand.Read(u[:])
-	u[6] = u[6]&0x0f | 0x40
-	u[8] = u[8]&0x3f | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", u[0:4], u[4:6], u[6:8], u[8:10], u[10:16])
+	return err
 }

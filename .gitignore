@@ -1,3 +1,5 @@
 /siqconv
 /siqconv.exe
 *.siq
+/siqconv-ui
+/siqconv-ui.exe

@@ -16,6 +16,27 @@ siqconv verify pkg.siq            # checks that .siq -> YAML -> .siq loses nothi
 
 `-f` overwrites an existing output.
 
+### Desktop app
+
+`siqconv-ui` is a small window for people who don't use the command line. It has three tabs:
+- **SIQ to folder:** unpack a `.siq`, or verify it.
+- **Folder to SIQ:** pack a package folder.
+- **New package:** create a package from the example template.
+
+You can also drop a `.siq` file, a package folder or its `content.yaml` onto the window.
+
+```sh
+go build -o siqconv-ui ./cmd/siqconv-ui                                   # macOS / Linux
+go build -ldflags "-H=windowsgui" -o siqconv-ui.exe ./cmd/siqconv-ui      # Windows, no console window
+```
+
+It is built with [Fyne](https://fyne.io), which needs cgo:
+- **macOS:** Xcode command line tools (`xcode-select --install`).
+- **Windows:** a GCC such as MSYS2 or TDM-GCC.
+- **Linux:** the X11/OpenGL dev packages (see Fyne's docs).
+
+Building for Windows from a Mac requires [fyne-cross](https://github.com/fyne-io/fyne-cross), which runs in Docker.
+
 [`example/example_pack`](example) is a complete example package with public-domain media. Pack it and open it in SIGame.
 
 `init` creates `pkg/` with empty media folders and a commented `content.yaml`. It covers:
