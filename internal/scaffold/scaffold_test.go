@@ -67,7 +67,7 @@ func TestInitCoversAllTypesAndPacks(t *testing.T) {
 		missing = append(missing, strings.Fields(line)[0])
 	}
 	sort.Strings(missing)
-	want := []string{"Audio/song.mp3", "Html/page.html", "Images/answer.jpg", "Images/logo.png", "Images/map.png", "Images/question.jpg", "Video/clip.mp4"}
+	want := []string{"Audio/song.mp3", "Html/page.html", "Images/answer.jpg", "Images/logo.png", "Images/map.png", "Images/question.jpg", "Video/clip.mp4", "Video/story_part1.mp4", "Video/story_part2.mp4"}
 	if !reflect.DeepEqual(missing, want) {
 		t.Errorf("missing = %v, want %v", missing, want)
 	}

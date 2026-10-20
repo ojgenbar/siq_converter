@@ -110,3 +110,14 @@ func TestFileHashesSkipNonMedia(t *testing.T) {
 		t.Errorf("got %v", got)
 	}
 }
+
+func TestExamplePackIsComplete(t *testing.T) {
+	b, err := ReadDir("../../example/example_pack")
+	if err != nil {
+		t.Fatal(err)
+	}
+	warnings, err := Check(b)
+	if err != nil || len(warnings) > 0 {
+		t.Fatalf("example package: %v %v", err, warnings)
+	}
+}

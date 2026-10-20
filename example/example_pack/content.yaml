@@ -1,0 +1,267 @@
+# Example SIGame question package (SIQ format 5) for siq_converter.
+# It shows every question type, content item kind and answer type.
+#
+#   siqconv pack example/example_pack      -> example/example_pack.siq
+#
+# All media is public domain, from Wikimedia Commons. See example/README.md and
+# global.sources below for credits.
+#
+# Comments in this file are for you only: they are not stored in the .siq and
+# do not survive `pack` + `unpack`.
+
+siq: 5
+name: SIQ Converter Example
+id: 5f0c2b1e-8d3a-4c7e-9b6f-2a1d4e8c7b90  # fixed so the example packs reproducibly; omit it to get a new UUID on every pack
+date: 20.10.2026
+publisher: siq_converter
+language: en-US
+difficulty: 3                       # 1..10
+logo: "@logo.png"                   # "@" = file in Images/
+tags:
+  - General knowledge
+  - Art
+  - Music
+  - Space
+info:                               # info is allowed on package, round, theme and question
+  authors:
+    - siq_converter contributors
+  comments: Example package for siq_converter. All media is public domain (Wikimedia Commons).
+
+# Shared sources, referenced as "@id" (optionally "@id#detail") from any info block.
+global:
+  sources:
+    - id: starry
+      author: Vincent van Gogh
+      title: The Starry Night (Wikimedia Commons, public domain)
+      year: 1889
+    - id: selfportrait
+      author: Vincent van Gogh
+      title: Self-Portrait (Wikimedia Commons, public domain)
+      year: 1887
+    - id: bluemarble
+      author: NASA
+      title: Blue Marble 2002 (Wikimedia Commons, public domain)
+      year: 2002
+    - id: beethoven5
+      author: Ludwig van Beethoven, Musopen recording
+      title: Symphony No. 5, I. Allegro con brio (Wikimedia Commons, public domain)
+    - id: apollo11
+      author: NASA
+      title: Apollo 11 Landing - first steps on the moon (Wikimedia Commons, public domain)
+      year: 1969
+    - id: eiffelportrait
+      author: Nadar
+      title: Gustave Eiffel (Wikimedia Commons, public domain)
+      year: 1888
+    - id: eiffeltower
+      author: Neurdein
+      title: Eiffel tower at Exposition Universelle, Paris (Wikimedia Commons, public domain)
+      year: 1889
+
+rounds:
+  # Round types: standart (default, may be omitted), table, themeList, final.
+  - name: Round 1
+    themes:
+      - name: Question types
+        info:
+          comments: One question of every well-known type
+        questions:
+          # simple (default, `type` omitted): everyone may press the button; whoever
+          # presses first answers, a wrong answer lets the others try.
+          - price: 100
+            params:
+              question:
+                - What is the capital of France?
+            right: Paris
+            wrong: Lyon                         # optional; one value or a list
+
+          # stake: players bid for the question, the highest bidder answers.
+          - price: 200
+            type: stake
+            params:
+              question:
+                - Which planet is known as the Red Planet?
+            right: Mars
+
+          # secret: the current player gives the question to another player,
+          # who then chooses the price from the numberSet.
+          - price: 300
+            type: secret
+            params:
+              theme: Geography                   # shown instead of the real theme
+              price:
+                numberSet: {minimum: 100, maximum: 500, step: 100}
+              selectionMode: exceptCurrent       # any | exceptCurrent
+              question:
+                - How many continents are there on Earth?
+            right: "7"
+            wrong: [Six, Five]
+
+          # secretPublicPrice: like secret, but theme and price are known before
+          # the question is given away.
+          - price: 400
+            type: secretPublicPrice
+            params:
+              theme: Literature
+              price:
+                numberSet: {minimum: 400, maximum: 400, step: 0}
+              selectionMode: any
+              question:
+                - Who wrote "Romeo and Juliet"?
+            right: William Shakespeare
+
+          # secretNoQuestion: given to another player, who just receives the price.
+          - price: 500
+            type: secretNoQuestion
+            params:
+              price:
+                numberSet: {minimum: 500, maximum: 500, step: 0}
+              selectionMode: any
+              question:
+                - A free gift!
+            right: []
+
+          # noRisk: only the current player answers; a right answer earns double,
+          # a wrong one costs nothing.
+          - price: 600
+            type: noRisk
+            params:
+              question:
+                - What is the chemical symbol for gold?
+            right: Au
+
+          # forAll: every player answers at once, no button.
+          # (withButton and forYourself are reserved names for future versions of
+          # simple and noRisk.)
+          - price: 700
+            type: forAll
+            params:
+              question:
+                - What is 7 x 8?
+            right: "56"
+
+      - name: Content items
+        questions:
+          # Items of a question play one after another.
+          - price: 100
+            info:
+              sources: ["@starry", "@selfportrait"]
+            params:
+              question:
+                - text: Who painted this?             # spoken by the showman
+                  placement: replic
+                - image: starry_night.jpg             # Images/starry_night.jpg
+              answer:                                 # optional, shown after the answer
+                - image: van_gogh_self_portrait.jpg
+                - text: Vincent van Gogh, "The Starry Night" (1889)
+                  placement: replic
+            right: Vincent van Gogh
+            wrong: Claude Monet
+
+          - price: 200
+            info:
+              sources: ["@beethoven5"]
+            params:
+              question:
+                - audio: beethoven_5.mp3              # Audio/beethoven_5.mp3; plays in the background
+                  wait: false                         # don't wait: the next item shows while it plays
+                - Name the composer
+            right: [Ludwig van Beethoven, Beethoven]
+
+          # A story told in steps: "what happens next?"
+          # Each screen item replaces the previous one, so once the question text
+          # appears the video is gone; part 2 is the first thing shown after the answer.
+          - price: 300
+            info:
+              sources: ["@apollo11"]
+              showmanComments: Armstrong steps off the ladder onto the Moon and says "That's one small step for man, one giant leap for mankind"
+            params:
+              question:
+                - text: >-
+                    July 20, 1969. The lunar module Eagle has landed on the Moon.
+                    Six hours later its commander opens the hatch and climbs down the ladder.
+                  duration: "00:00:08"                # show the story for 8 seconds
+                - video: apollo_11_part1.mp4          # 16 s: "I'm going to step off the LM now"
+                - What happens next?
+              answer:
+                - video: apollo_11_part2.mp4          # 21 s: "That's one small step for man..."
+                - text: >-
+                    Neil Armstrong becomes the first person to walk on the Moon:
+                    "That's one small step for man, one giant leap for mankind."
+            right: [Armstrong steps onto the Moon, First step on the Moon]
+
+          # HTML page: a self-contained file in Html/ (images embedded as data: URIs,
+          # because SIGame renames package files when it unpacks a package).
+          - price: 400
+            info:
+              sources: ["@eiffelportrait", "@eiffeltower"]
+            params:
+              question:
+                - html: eiffel.html                   # Html/eiffel.html
+                - text: Name the tower
+                  placement: replic
+              answer:
+                - image: eiffel_tower_1889.jpg        # the tower at the 1889 World's Fair
+            right: Eiffel Tower
+
+      - name: Answer types
+        questions:
+          # select: players choose one of the options; right = option label.
+          - price: 100
+            params:
+              question:
+                - Which planet is the largest?
+              answerType: select
+              answerOptions:
+                group:
+                  A: [Mercury]
+                  B: [Jupiter]
+                  C: [Earth]
+                  D: [Mars]
+            right: B
+
+          # number: numeric answer, accepted within +- answerDeviation.
+          - price: 200
+            params:
+              question:
+                - In which year did the first man walk on the Moon?
+              answerType: number
+              answerDeviation: "1"
+              answerDuration: "30"                    # seconds to answer
+            right: "1969"
+
+          # point: players click on the image; right = "x,y" (fractions of width
+          # and height), accepted within answerDeviation.
+          - price: 300
+            info:
+              sources: ["@bluemarble"]
+              showmanComments: The map is equirectangular, so Paris (2.35 E, 48.86 N) is at x=0.507, y=0.229
+            params:
+              question:
+                - Point at Paris on the map
+                - image: world_map.jpg                # Images/world_map.jpg
+              answerType: point
+              answerDeviation: "0.03"
+            right: "0.507,0.229"
+
+  - name: Final
+    type: final
+    themes:
+      # In the final round each theme has one question; players remove themes
+      # until one is left, then everyone stakes and answers (stakeAll).
+      - name: History
+        questions:
+          - price: 0
+            type: stakeAll
+            params:
+              question:
+                - Who was the first President of the United States?
+            right: George Washington
+      - name: Science
+        questions:
+          - price: 0
+            type: stakeAll
+            params:
+              question:
+                - What is the speed of light in km/s (approximately)?
+            right: "300000"

@@ -7,7 +7,7 @@
 # the items; `pack` lists every missing file:
 #   Images/question.jpg  Images/answer.jpg  Images/map.png  Images/logo.png
 #   Audio/song.mp3
-#   Video/clip.mp4
+#   Video/clip.mp4  Video/story_part1.mp4  Video/story_part2.mp4
 #   Html/page.html
 #
 # Comments in this file are for you only: they are not stored in the .siq and
@@ -154,6 +154,25 @@ rounds:
                   ref: false
                 - html: page.html                     # Html/page.html (MISSING: add it)
             right: External media answer
+
+          # A story told in steps: "what happens next?"
+          # Each screen item replaces the previous one, so once the question text
+          # appears the video is gone; part 2 is the first thing shown after the answer.
+          - price: 500
+            info:
+              showmanComments: What really happens next, for the showman
+            params:
+              question:
+                - text: >-
+                    Background of the story: who, where and when.
+                    Players read it before the video starts.
+                  duration: "00:00:08"                # show the story for 8 seconds
+                - video: story_part1.mp4              # Video/story_part1.mp4 (MISSING: add it); stops right before the key moment
+                - What happens next?
+              answer:
+                - video: story_part2.mp4              # Video/story_part2.mp4 (MISSING: add it); the key moment
+                - text: What happened and why it matters
+            right: What happens next
 
       - name: Answer types
         questions:

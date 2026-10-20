@@ -16,6 +16,8 @@ siqconv verify pkg.siq            # checks that .siq -> YAML -> .siq loses nothi
 
 `-f` overwrites an existing output.
 
+[`example/example_pack`](example) is a complete example package with public-domain media. Pack it and open it in SIGame.
+
 `init` creates `pkg/` with empty media folders and a commented `content.yaml`. It covers:
 - every question type: simple, stake, secret, secretPublicPrice, secretNoQuestion, noRisk, forAll, and stakeAll in the final round
 - every content item kind
