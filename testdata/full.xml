@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hand-written fixture covering every construct, in a non-canonical style:
+     indented, reordered xs:all children, lowercase booleans, explicit defaults. -->
+<package version="5" name="Full &amp; &quot;fixture&quot;" id="11111111-2222-4333-8444-555555555555"
+         restriction="18+" date="2026" publisher="me" contactUri="https://example.org" difficulty="7"
+         logo="@logo.png" language="en-US" generator="hand"
+         xmlns="https://github.com/VladimirKhil/SI/blob/master/assets/siq_5.xsd">
+  <info>
+    <comments>Line one
+Line two with trailing space </comments>
+    <authors><author>@a1</author><author>Plain Author</author></authors>
+    <sources><source>@s1#p. 12</source></sources>
+    <showmanComments>Say hi</showmanComments>
+    <extension>{"x":1}</extension>
+  </info>
+  <files>
+    <file name="Images/stale.png" hash="DEADBEEF" />
+  </files>
+  <tags><tag>yes</tag><tag>null</tag><tag>1.0</tag></tags>
+  <global>
+    <Sources><Source id="s1"><Author>Pushkin</Author><Title>Onegin</Title><Year>1833</Year><Publish>P</Publish><City>SPb</City></Source></Sources>
+    <Authors><Author id="a1"><Name>Ivan</Name><SecondName /><Surname>Petrov</Surname><Country>RU</Country><City>Msk</City></Author></Authors>
+  </global>
+  <rounds>
+    <round name="1">
+      <info><authors><author>Round Author</author></authors></info>
+      <themes>
+        <theme name="🐒 Emoji theme">
+          <questions>
+            <question price="100">
+              <right><answer>One</answer></right>
+              <params>
+                <param name="question" type="content">
+                  <item>  leading and trailing spaces  </item>
+                  <item type="text" placement="replic">Showman says</item>
+                  <item type="image" isRef="true" waitForFinish="false">a b+c@2x (1).jpg</item>
+                  <item type="audio" isRef="True">song.mp3</item>
+                  <item type="audio" isRef="True" placement="screen" duration="00:00:05">клип.mp3</item>
+                  <item type="video" isRef="false">https://example.org/v.mp4</item>
+                  <item type="html" isRef="True">page.html</item>
+                  <item type="text" isRef="True">odd text ref</item>
+                  <item type="image" isRef="True" placement="screen">explicit default.png</item>
+                </param>
+                <param name="answer" type="content"><item type="image" isRef="True">a b+c@2x (1).jpg</item></param>
+                <param name="empty" type="content"></param>
+              </params>
+              <wrong><answer>Two</answer><answer>Three</answer></wrong>
+            </question>
+            <question price="-1" type="secret">
+              <info><comments>multi
+line</comments></info>
+              <params>
+                <param name="question" type="content"><item>Q</item></param>
+                <param name="theme">Custom theme</param>
+                <param name="selectionMode" type="simple">exceptCurrent</param>
+                <param name="price" type="numberSet"><numberSet minimum="100" maximum="500" step="100" /></param>
+              </params>
+              <right></right>
+            </question>
+            <question price="0" type="custom">
+              <script>
+                <step><param name="action">showContent</param><param name="content" type="content"><item>step item</item></param></step>
+                <step />
+              </script>
+              <params>
+                <param name="nested" type="group">
+                  <param name="inner">value</param>
+                  <param name="deeper" type="group"><param name="x">1</param></param>
+                </param>
+                <param name="halfSet" type="numberSet"><numberSet minimum="5" /></param>
+                <param name="refParam" isRef="True">file.png</param>
+                <param name="weird" type="unknownType">raw value</param>
+                <param name="multiline">first
+second</param>
+              </params>
+              <right><answer>A</answer><answer>B, still B</answer></right>
+            </question>
+          </questions>
+        </theme>
+        <theme name="Empty theme" />
+      </themes>
+    </round>
+    <round name="Final" type="final"><themes><theme name="T"><questions><question price="0"><right><answer>x</answer></right></question></questions></theme></themes></round>
+    <round name="" />
+  </rounds>
+</package>

@@ -1,0 +1,21 @@
+# Hand-written package: no id, no hashes, lenient forms.
+name: My first package
+rounds:
+  - name: Round 1
+    themes:
+      - name: Animals
+        questions:
+          - price: 100
+            params:
+              question:
+                - What animal is this?
+                - image: cat.jpg
+            right: Cat
+          - price: 200
+            params:
+              question:
+                - audio: meow.mp3
+              answer:
+                - Cat again
+            right: [Cat, Kitty]
+            wrong: Dog

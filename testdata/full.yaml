@@ -1,0 +1,126 @@
+siq: 5
+name: Full & "fixture"
+id: 11111111-2222-4333-8444-555555555555
+restriction: 18+
+date: "2026"
+publisher: me
+contactUri: https://example.org
+difficulty: 7
+logo: '@logo.png'
+language: en-US
+generator: hand
+tags:
+  - yes
+  - "null"
+  - "1.0"
+info:
+  authors:
+    - '@a1'
+    - Plain Author
+  sources:
+    - '@s1#p. 12'
+  comments: "Line one\nLine two with trailing space "
+  showmanComments: Say hi
+  extension: '{"x":1}'
+global:
+  authors:
+    - id: a1
+      name: Ivan
+      surname: Petrov
+      country: RU
+      city: Msk
+  sources:
+    - id: s1
+      author: Pushkin
+      title: Onegin
+      year: 1833
+      publish: P
+      city: SPb
+rounds:
+  - name: "1"
+    info:
+      authors:
+        - Round Author
+    themes:
+      - name: "🐒 Emoji theme"
+        questions:
+          - price: 100
+            params:
+              question:
+                - '  leading and trailing spaces  '
+                - text: Showman says
+                  placement: replic
+                - image: a b+c@2x (1).jpg
+                  wait: false
+                - audio: song.mp3
+                - audio: клип.mp3
+                  placement: screen
+                  duration: 00:00:05
+                - video: https://example.org/v.mp4
+                  ref: false
+                - html: page.html
+                - text: odd text ref
+                  ref: true
+                - image: explicit default.png
+              answer:
+                - image: a b+c@2x (1).jpg
+              empty: []
+            right: One
+            wrong:
+              - Two
+              - Three
+          - price: -1
+            type: secret
+            info:
+              comments: |-
+                multi
+                line
+            params:
+              question:
+                - Q
+              theme: Custom theme
+              selectionMode: exceptCurrent
+              price:
+                numberSet: {minimum: 100, maximum: 500, step: 100}
+            right: []
+          - price: 0
+            type: custom
+            params:
+              nested:
+                group:
+                  inner: value
+                  deeper:
+                    group:
+                      x: "1"
+              halfSet:
+                numberSet: {minimum: 5}
+              refParam:
+                raw:
+                  ref: true
+                  value: file.png
+              weird:
+                raw:
+                  type: unknownType
+                  value: raw value
+              multiline: |-
+                first
+                second
+            script:
+              - action: showContent
+                content:
+                  - step item
+              - {}
+            right:
+              - A
+              - B, still B
+      - name: Empty theme
+        questions: []
+  - name: Final
+    type: final
+    themes:
+      - name: T
+        questions:
+          - price: 0
+            right: x
+  - name: ""
+    themes: []
