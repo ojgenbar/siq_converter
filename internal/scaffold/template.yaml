@@ -1,0 +1,217 @@
+# SIGame question package (SIQ format 5), created by `siqconv init`.
+#
+#   siqconv pack <this folder>      -> <this folder>.siq
+#
+# MEDIA FILES REFERENCED BELOW DO NOT EXIST YET.
+# Put files with these names into the folders next to this file, or edit/remove
+# the items; `pack` lists every missing file:
+#   Images/question.jpg  Images/answer.jpg  Images/map.png  Images/logo.png
+#   Audio/song.mp3
+#   Video/clip.mp4
+#   Html/page.html
+#
+# Comments in this file are for you only: they are not stored in the .siq and
+# do not survive `pack` + `unpack`.
+
+siq: 5
+name: {{NAME}}
+# id: omitted, so a new UUID is generated on every pack. Set one to keep it stable.
+date: {{DATE}}
+publisher: Your name
+language: en-US
+difficulty: 5                       # 1..10
+# restriction: 18+
+logo: "@logo.png"                   # "@" = file in Images/
+tags:
+  - General knowledge
+info:                               # info is allowed on package, round, theme and question
+  authors:
+    - Your name                     # or "@a1" to refer to global.authors below
+  # sources: ["@s1#p. 12"]
+  # comments: Shown to everyone
+  # showmanComments: Shown to the showman only
+
+# Optional shared authors/sources, referenced as "@id" from any info block.
+# global:
+#   authors: [{id: a1, name: Ivan, surname: Petrov, country: RU, city: Moscow}]
+#   sources: [{id: s1, author: Pushkin, title: Eugene Onegin, year: 1833}]
+
+rounds:
+  # Round types: standart (default, may be omitted), table, themeList, final.
+  - name: Round 1
+    themes:
+      - name: Question types
+        info:
+          comments: One question of every well-known type
+        questions:
+          # simple (default, `type` omitted): everyone may press the button; whoever
+          # presses first answers, a wrong answer lets the others try.
+          - price: 100
+            params:
+              question:
+                - What is the capital of France?
+            right: Paris
+            wrong: Lyon                         # optional; one value or a list
+
+          # stake: players bid for the question, the highest bidder answers.
+          - price: 200
+            type: stake
+            params:
+              question:
+                - Which planet is known as the Red Planet?
+            right: Mars
+
+          # secret: the current player gives the question to another player,
+          # who then chooses the price from the numberSet.
+          - price: 300
+            type: secret
+            params:
+              theme: Secret theme                # shown instead of the real theme
+              price:
+                numberSet: {minimum: 100, maximum: 500, step: 100}
+              selectionMode: exceptCurrent       # any | exceptCurrent
+              question:
+                - How many continents are there on Earth?
+            right: "7"
+            wrong: [Six, Five]
+
+          # secretPublicPrice: like secret, but theme and price are known before
+          # the question is given away.
+          - price: 400
+            type: secretPublicPrice
+            params:
+              theme: Open secret
+              price:
+                numberSet: {minimum: 400, maximum: 400, step: 0}
+              selectionMode: any
+              question:
+                - Who wrote "Romeo and Juliet"?
+            right: William Shakespeare
+
+          # secretNoQuestion: given to another player, who just receives the price.
+          - price: 500
+            type: secretNoQuestion
+            params:
+              price:
+                numberSet: {minimum: 500, maximum: 500, step: 0}
+              selectionMode: any
+              question:
+                - A free gift!
+            right: []
+
+          # noRisk: only the current player answers; a right answer earns double,
+          # a wrong one costs nothing.
+          - price: 600
+            type: noRisk
+            params:
+              question:
+                - What is the chemical symbol for gold?
+            right: Au
+
+          # forAll: every player answers at once, no button.
+          # (withButton and forYourself are reserved names for future versions of
+          # simple and noRisk.)
+          - price: 700
+            type: forAll
+            params:
+              question:
+                - What is 7 x 8?
+            right: "56"
+
+      - name: Content items
+        questions:
+          # Items of a question play one after another.
+          - price: 100
+            params:
+              question:
+                - text: Listen and look              # spoken by the showman
+                  placement: replic
+                - image: question.jpg                 # Images/question.jpg  (MISSING: add it)
+              answer:                                 # optional, shown after the answer
+                - image: answer.jpg                   # Images/answer.jpg    (MISSING: add it)
+            right: Answer to the image question
+
+          - price: 200
+            params:
+              question:
+                - audio: song.mp3                     # Audio/song.mp3 (MISSING: add it); plays in the background
+                  wait: false                         # don't wait: the next item shows while it plays
+                - Name the song
+            right: Song title
+
+          - price: 300
+            params:
+              question:
+                - video: clip.mp4                     # Video/clip.mp4 (MISSING: add it)
+                - text: Shown for 5 seconds
+                  duration: "00:00:05"
+            right: Video answer
+
+          - price: 400
+            params:
+              question:
+                - video: https://example.org/clip.mp4 # external file instead of a package file
+                  ref: false
+                - html: page.html                     # Html/page.html (MISSING: add it)
+            right: External media answer
+
+      - name: Answer types
+        questions:
+          # select: players choose one of the options; right = option label.
+          - price: 100
+            params:
+              question:
+                - Which planet is the largest?
+              answerType: select
+              answerOptions:
+                group:
+                  A: [Mercury]
+                  B: [Jupiter]
+                  C: [Earth]
+                  D: [Mars]
+            right: B
+
+          # number: numeric answer, accepted within +- answerDeviation.
+          - price: 200
+            params:
+              question:
+                - In which year did the first man walk on the Moon?
+              answerType: number
+              answerDeviation: "1"
+              answerDuration: "30"                    # seconds to answer
+            right: "1969"
+
+          # point: players click on the image; right = "x,y" (fractions of width
+          # and height), accepted within answerDeviation.
+          - price: 300
+            info:
+              showmanComments: The answer is in the middle of the map
+            params:
+              question:
+                - Point at the capital on the map
+                - image: map.png                      # Images/map.png (MISSING: add it)
+              answerType: point
+              answerDeviation: "0.1"
+            right: "0.5,0.5"
+
+  - name: Final
+    type: final
+    themes:
+      # In the final round each theme has one question; players remove themes
+      # until one is left, then everyone stakes and answers (stakeAll).
+      - name: History
+        questions:
+          - price: 0
+            type: stakeAll
+            params:
+              question:
+                - Who was the first President of the United States?
+            right: George Washington
+      - name: Science
+        questions:
+          - price: 0
+            type: stakeAll
+            params:
+              question:
+                - What is the speed of light in km/s (approximately)?
+            right: "300000"

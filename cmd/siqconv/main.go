@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"siq_converter/internal/archive"
+	"siq_converter/internal/scaffold"
 	"siq_converter/internal/siqxml"
 	"siq_converter/internal/siqyaml"
 )
@@ -21,6 +22,7 @@ import (
 const usage = `siqconv converts SIGame question packages (.siq) to YAML folders and back.
 
 Usage:
+  siqconv init <dir>                      new package folder with example questions of every type
   siqconv unpack [-f] <in.siq> [outdir]   .siq -> folder with content.yaml and media
   siqconv pack   [-f] <dir> [out.siq]     folder -> .siq
   siqconv convert [-f] <path> [out]       unpack a .siq, or pack a folder / content.yaml
@@ -58,6 +60,15 @@ func run(args []string) error {
 		out = pos[1]
 	}
 	switch cmd {
+	case "init":
+		if out != "" {
+			return errors.New("init: expected 1 argument")
+		}
+		if err := scaffold.Init(in); err != nil {
+			return err
+		}
+		fmt.Printf("created %s: edit %s, add the media files it lists, then run: siqconv pack %s\n", in, filepath.Join(in, archive.ContentYAML), in)
+		return nil
 	case "unpack":
 		return unpack(in, out, *force)
 	case "pack":

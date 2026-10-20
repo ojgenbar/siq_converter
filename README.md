@@ -7,6 +7,7 @@ Simple SIQ (SI game questions) to Yaml and back converter
 ```sh
 go build -o siqconv ./cmd/siqconv
 
+siqconv init pkg                  # new package: commented example of every question type
 siqconv unpack pkg.siq            # -> pkg/content.yaml, pkg/Images/..., pkg/Audio/...
 siqconv pack pkg                  # -> pkg.siq
 siqconv convert <path>            # picks the direction itself
@@ -14,6 +15,13 @@ siqconv verify pkg.siq            # checks that .siq -> YAML -> .siq loses nothi
 ```
 
 `-f` overwrites an existing output.
+
+`init` creates `pkg/` with empty media folders and a commented `content.yaml`. It covers:
+- every question type: simple, stake, secret, secretPublicPrice, secretNoQuestion, noRisk, forAll, and stakeAll in the final round
+- every content item kind
+- the select, number and point answer types
+
+The media files it references are **not** created. The comment at the top lists them, and `pack` reports any still missing. YAML comments exist only in this template; `pack` + `unpack` does not keep them.
 
 ## Folder layout
 
