@@ -40,7 +40,6 @@ type ui struct {
 	unpackIn, unpackOut *widget.Entry
 	packIn, packOut     *widget.Entry
 	newParent, newName  *widget.Entry
-	packOutConfirmed    bool // the save dialog already asked about overwriting
 
 	actions []*widget.Button
 	busy    *widget.ProgressBarInfinite
@@ -77,11 +76,12 @@ func (u *ui) unpackTab() fyne.CanvasObject {
 	u.unpackIn.SetPlaceHolder("package.siq")
 	u.unpackOut = widget.NewEntry()
 	u.unpackOut.SetPlaceHolder("folder to create (default: next to the .siq)")
-	u.unpackIn.OnChanged = func(s string) {
+	autoFill(u.unpackIn, u.unpackOut, func(s string) string {
 		if strings.EqualFold(filepath.Ext(s), ".siq") {
-			u.unpackOut.SetText(ops.UnpackTarget(s))
+			return ops.UnpackTarget(s)
 		}
-	}
+		return ""
+	})
 	browseIn := widget.NewButtonWithIcon("Browse…", theme.FileIcon(), func() {
 		d := dialog.NewFileOpen(func(r fyne.URIReadCloser, err error) {
 			if r != nil {
@@ -128,36 +128,28 @@ func (u *ui) packTab() fyne.CanvasObject {
 	u.packIn.SetPlaceHolder("folder with content.yaml")
 	u.packOut = widget.NewEntry()
 	u.packOut.SetPlaceHolder("package.siq (default: next to the folder)")
-	u.packIn.OnChanged = func(s string) {
-		if s != "" {
-			u.packOut.SetText(ops.PackTarget(s))
+	autoFill(u.packIn, u.packOut, func(s string) string {
+		if s == "" {
+			return ""
 		}
-	}
-	u.packOut.OnChanged = func(string) { u.packOutConfirmed = false }
+		return ops.PackTarget(s)
+	})
 	browseIn := widget.NewButtonWithIcon("Browse…", theme.FolderIcon(), func() {
 		u.pickFolder(u.packIn.Text, func(dir string) { u.packIn.SetText(dir) })
 	})
-	browseOut := widget.NewButtonWithIcon("Save as…", theme.DocumentSaveIcon(), func() {
-		d := dialog.NewFileSave(func(wc fyne.URIWriteCloser, err error) {
-			if wc == nil {
-				return
+	// A folder picker rather than a save dialog: Fyne's save dialog creates (and
+	// so truncates) the chosen file immediately. The name stays editable, and
+	// Pack asks before replacing an existing archive.
+	browseOut := widget.NewButtonWithIcon("Browse…", theme.FolderIcon(), func() {
+		u.pickFolder(u.packOut.Text, func(dir string) {
+			name := filepath.Base(u.packOut.Text)
+			if !strings.EqualFold(filepath.Ext(name), ".siq") {
+				name = filepath.Base(ops.PackTarget(u.packIn.Text))
 			}
-			wc.Close() // the dialog creates the file; Pack overwrites it
-			path := wc.URI().Path()
-			if !strings.EqualFold(filepath.Ext(path), ".siq") {
-				os.Remove(path)
-				path += ".siq"
-			}
-			u.packOut.SetText(path)
-			u.packOutConfirmed = true
-		}, u.win)
-		d.SetFilter(storage.NewExtensionFileFilter([]string{".siq"}))
-		if u.packOut.Text != "" {
-			d.SetFileName(filepath.Base(u.packOut.Text))
-		}
-		u.showFileDialog(d, u.packOut.Text)
+			u.packOut.SetText(filepath.Join(dir, name))
+		})
 	})
-	run := u.action("Pack", theme.UploadIcon(), func() { u.runPack(u.packOutConfirmed) })
+	run := u.action("Pack", theme.UploadIcon(), func() { u.runPack(false) })
 	return container.NewVBox(
 		hint("Turn a package folder (content.yaml + Images/Audio/Video/Html) into a .siq for SIGame."),
 		widget.NewForm(
@@ -388,6 +380,20 @@ func (u *ui) dropped(_ fyne.Position, uris []fyne.URI) {
 			return
 		}
 		u.setLog("Drop a .siq file, a package folder or its content.yaml.")
+	}
+}
+
+// autoFill keeps out derived from in until the user picks or types another
+// value for out: only an empty field or the previous suggestion is replaced.
+func autoFill(in, out *widget.Entry, suggest func(string) string) {
+	last := ""
+	in.OnChanged = func(s string) {
+		next := suggest(s)
+		if next == "" || (out.Text != "" && out.Text != last) {
+			return
+		}
+		last = next
+		out.SetText(next)
 	}
 }
 

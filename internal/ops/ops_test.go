@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"archive/zip"
 	"errors"
 	"os"
 	"path/filepath"
@@ -76,5 +77,64 @@ func TestPackTargetResolvesRelativePaths(t *testing.T) {
 		if err != nil || dir != tmpReal || filepath.Base(got) != "quiz.siq" {
 			t.Errorf("PackTarget(%q) = %q, want %s", in, got, filepath.Join(tmp, "quiz.siq"))
 		}
+	}
+}
+
+func TestRepackInsideFolderDoesNotNestArchives(t *testing.T) {
+	tmp := t.TempDir()
+	siq := minimalSIQ(t, tmp)
+	pkg := filepath.Join(tmp, "pkg")
+	if _, err := Unpack(siq, pkg, false); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(pkg, "old.siq"), []byte("an older build"), 0o644)
+	out := filepath.Join(pkg, "build.siq")
+	for i := 0; i < 3; i++ {
+		res, err := Pack(pkg, out, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "old.siq") {
+			t.Errorf("warnings = %v", res.Warnings)
+		}
+		zr, err := zip.OpenReader(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range zr.File {
+			if strings.HasSuffix(f.Name, ".siq") {
+				t.Errorf("pack %d: archive contains %s", i+1, f.Name)
+			}
+		}
+		zr.Close()
+	}
+}
+
+func TestForcedUnpackKeepsOldFolderOnFailure(t *testing.T) {
+	tmp := t.TempDir()
+	siq := minimalSIQ(t, tmp)
+	parent := filepath.Join(tmp, "parent")
+	out := filepath.Join(parent, "pkg")
+	if _, err := Unpack(siq, out, false); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(out, "notes.txt"), []byte("my edits"), 0o644)
+	os.Chmod(parent, 0o555) // nothing new can be created next to the folder
+	defer os.Chmod(parent, 0o755)
+	if _, err := Unpack(siq, out, true); err == nil {
+		t.Skip("parent folder is still writable (running as root?)")
+	}
+	if data, err := os.ReadFile(filepath.Join(out, "notes.txt")); err != nil || string(data) != "my edits" {
+		t.Error("the existing folder was lost after a failed unpack")
+	}
+	os.Chmod(parent, 0o755)
+	if _, err := Unpack(siq, out, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "notes.txt")); err == nil {
+		t.Error("forced unpack did not replace the folder")
+	}
+	if entries, _ := os.ReadDir(parent); len(entries) != 1 {
+		t.Errorf("temporary folders left behind: %v", entries)
 	}
 }

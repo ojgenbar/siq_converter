@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"crypto/sha256"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -104,10 +105,10 @@ func TestCheck(t *testing.T) {
 }
 
 func TestFileHashesSkipNonMedia(t *testing.T) {
-	got := FileHashes([]File{{Path: "quality.marker"}, {Path: "Video/b.mp4", Data: []byte("v")}, {Path: "Html/a.html", Data: []byte("h")}, {Path: "Images/sub/x.png"}})
+	got, err := FileHashes([]File{{Path: "quality.marker"}, {Path: "Video/b.mp4", Data: []byte("v")}, {Path: "Html/a.html", Data: []byte("h")}, {Path: "Images/sub/x.png"}})
 	want := []siqxml.FileHash{{Name: "Html/a.html", Hash: Hash([]byte("h"))}, {Name: "Video/b.mp4", Hash: Hash([]byte("v"))}}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %v", got)
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, %v", got, err)
 	}
 }
 
@@ -119,5 +120,60 @@ func TestExamplePackIsComplete(t *testing.T) {
 	warnings, err := Check(b)
 	if err != nil || len(warnings) > 0 {
 		t.Fatalf("example package: %v %v", err, warnings)
+	}
+}
+
+func writeZip(t *testing.T, entries map[string]string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "x.siq")
+	f, err := os.Create(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+	for name, body := range entries {
+		w, _ := zw.Create(name)
+		w.Write([]byte(body))
+	}
+	zw.Close()
+	f.Close()
+	return p
+}
+
+func TestReadSIQRejectsClashingNames(t *testing.T) {
+	content := `<package name="x" version="5"><rounds /></package>`
+	for name, extra := range map[string]map[string]string{
+		"stray content.yaml": {"content.yaml": "name: other"},
+		"case clash":         {"Images/a.jpg": "1", "Images/A.jpg": "2"},
+	} {
+		entries := map[string]string{"content.xml": content}
+		for k, v := range extra {
+			entries[k] = v
+		}
+		if _, err := ReadSIQ(writeZip(t, entries)); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+}
+
+func TestWriteSIQFailureKeepsExistingArchive(t *testing.T) {
+	b, err := ReadDir("../../testdata/minimal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out.siq")
+	if err := os.WriteFile(out, []byte("previous archive"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b.Files = append(b.Files, File{Path: "Images/gone.png", Src: filepath.Join(dir, "does-not-exist.png")})
+	if err := WriteSIQ(out, b); err == nil {
+		t.Fatal("expected an error for an unreadable file")
+	}
+	if data, _ := os.ReadFile(out); string(data) != "previous archive" {
+		t.Error("existing archive was changed by a failed write")
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 {
+		t.Errorf("temporary files left behind: %v", entries)
 	}
 }

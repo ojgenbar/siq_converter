@@ -29,10 +29,35 @@ const (
 )
 
 // File is a package file other than content.xml, e.g. "Images/photo 1.jpg".
+// Its content is either held in Data or, for files of a package folder, read
+// from Src on demand, so packing does not load all media into memory.
 type File struct {
 	Path     string // decoded, slash-separated, relative to the package root
 	Data     []byte
+	Src      string // file on disk; used when set
 	Modified time.Time
+}
+
+// Open returns the file content.
+func (f File) Open() (io.ReadCloser, error) {
+	if f.Src != "" {
+		return os.Open(f.Src)
+	}
+	return io.NopCloser(bytes.NewReader(f.Data)), nil
+}
+
+// Hash returns the uppercase hex SHA-256 of the file content.
+func (f File) Hash() (string, error) {
+	rc, err := f.Open()
+	if err != nil {
+		return "", err
+	}
+	defer rc.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, rc); err != nil {
+		return "", fmt.Errorf("%s: %w", f.Path, err)
+	}
+	return strings.ToUpper(hex.EncodeToString(h.Sum(nil))), nil
 }
 
 // Bundle is a package together with its files.
@@ -68,10 +93,16 @@ func ReadSIQ(name string) (*Bundle, error) {
 		if err != nil {
 			return nil, fmt.Errorf("archive entry %q: %w", f.Name, err)
 		}
-		if seen[p] {
-			return nil, fmt.Errorf("archive entry %q: duplicate file %q", f.Name, p)
+		// Folders on Windows and macOS ignore case, so names differing only in
+		// case, or a stray content.yaml, would overwrite each other on unpack.
+		key := strings.ToLower(p)
+		if key == ContentYAML || key == ContentXML {
+			return nil, fmt.Errorf("archive entry %q: a file named %s would clash with the package description", f.Name, p)
 		}
-		seen[p] = true
+		if seen[key] {
+			return nil, fmt.Errorf("archive entry %q: duplicate file %q (names may differ only in case)", f.Name, p)
+		}
+		seen[key] = true
 		b.Files = append(b.Files, File{Path: p, Data: data, Modified: f.Modified})
 	}
 	if content == nil {
@@ -119,38 +150,70 @@ func cleanPath(p string) (string, error) {
 
 // WriteSIQ writes a .siq archive: content.xml first (deflated), then other
 // root files, then the media folders; media is stored uncompressed.
-func WriteSIQ(name string, b *Bundle) error {
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	content := siqxml.Encode(b.Package, FileHashes(b.Files))
+// The archive is streamed into a temporary file next to name and moved into
+// place only when complete, so a failure never leaves a broken archive behind.
+func WriteSIQ(name string, b *Bundle) (err error) {
+	hashes, err := FileHashes(b.Files)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(name), "."+filepath.Base(name)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tmp.Close()
+			os.Remove(tmp.Name())
+		}
+	}()
+	zw := zip.NewWriter(tmp)
 	w, err := zw.CreateHeader(&zip.FileHeader{Name: ContentXML, Method: zip.Deflate, Modified: time.Now()})
 	if err != nil {
 		return err
 	}
-	if _, err := w.Write(content); err != nil {
+	if _, err := w.Write(siqxml.Encode(b.Package, hashes)); err != nil {
 		return err
 	}
 	for _, f := range sortedFiles(b.Files) {
-		method := zip.Store
-		if !isMedia(f.Path) {
-			method = zip.Deflate
-		}
-		mod := f.Modified
-		if mod.IsZero() {
-			mod = time.Now()
-		}
-		w, err := zw.CreateHeader(&zip.FileHeader{Name: EncodeName(f.Path), Method: method, Modified: mod})
-		if err != nil {
-			return err
-		}
-		if _, err := w.Write(f.Data); err != nil {
+		if err := writeEntry(zw, f); err != nil {
 			return err
 		}
 	}
 	if err := zw.Close(); err != nil {
 		return err
 	}
-	return os.WriteFile(name, buf.Bytes(), 0o644)
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), name)
+}
+
+func writeEntry(zw *zip.Writer, f File) error {
+	method := zip.Store
+	if !isMedia(f.Path) {
+		method = zip.Deflate
+	}
+	mod := f.Modified
+	if mod.IsZero() {
+		mod = time.Now()
+	}
+	w, err := zw.CreateHeader(&zip.FileHeader{Name: EncodeName(f.Path), Method: method, Modified: mod})
+	if err != nil {
+		return err
+	}
+	rc, err := f.Open()
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+	if _, err := io.Copy(w, rc); err != nil {
+		return fmt.Errorf("%s: %w", f.Path, err)
+	}
+	return nil
 }
 
 // sortedFiles orders files as root files, Images, Audio, Video, Html, then
@@ -195,16 +258,20 @@ func isMedia(p string) bool {
 
 // FileHashes computes the <files> list the way SIGame does: uppercase hex
 // SHA-256 of every media file, keyed by "Folder/decoded name", sorted ordinally.
-func FileHashes(files []File) []siqxml.FileHash {
+func FileHashes(files []File) ([]siqxml.FileHash, error) {
 	var out []siqxml.FileHash
 	for _, f := range files {
 		if !isMedia(f.Path) {
 			continue
 		}
-		out = append(out, siqxml.FileHash{Name: f.Path, Hash: Hash(f.Data)})
+		h, err := f.Hash()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, siqxml.FileHash{Name: f.Path, Hash: h})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
+	return out, nil
 }
 
 // Hash returns the uppercase hex SHA-256 of data.
@@ -269,15 +336,11 @@ func ReadDir(dir string) (*Bundle, error) {
 		if rel == ContentYAML || rel == ContentXML {
 			return nil
 		}
-		data, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
 		info, err := d.Info()
 		if err != nil {
 			return err
 		}
-		b.Files = append(b.Files, File{Path: rel, Data: data, Modified: info.ModTime()})
+		b.Files = append(b.Files, File{Path: rel, Src: p, Modified: info.ModTime()})
 		return nil
 	})
 	if err != nil {
@@ -304,11 +367,14 @@ func WriteDir(dir string, b *Bundle) error {
 		return err
 	}
 	for _, f := range b.Files {
+		if strings.EqualFold(f.Path, ContentYAML) {
+			return fmt.Errorf("%s: a package file would overwrite %s", f.Path, ContentYAML)
+		}
 		p := filepath.Join(dir, filepath.FromSlash(f.Path))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(p, f.Data, 0o644); err != nil {
+		if err := copyTo(p, f); err != nil {
 			return err
 		}
 		if !f.Modified.IsZero() {
@@ -316,6 +382,23 @@ func WriteDir(dir string, b *Bundle) error {
 		}
 	}
 	return nil
+}
+
+func copyTo(dst string, f File) error {
+	rc, err := f.Open()
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, rc); err != nil {
+		out.Close()
+		return fmt.Errorf("%s: %w", f.Path, err)
+	}
+	return out.Close()
 }
 
 // Check verifies that every file the package references exists. It returns

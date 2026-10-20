@@ -6,8 +6,6 @@
 // semantically equal packages compare equal with reflect.DeepEqual.
 package model
 
-import "unicode/utf8"
-
 // Version is the SIQ format version this model describes.
 const Version = "5"
 
@@ -175,7 +173,7 @@ func IsItemType(t string) bool {
 // (control characters other than tab, newline and carriage return, U+FFFE, U+FFFF).
 func InvalidXMLRune(s string) (rune, bool) {
 	for _, r := range s {
-		if (r < 0x20 && r != '\t' && r != '\n' && r != '\r') || r == 0xFFFE || r == 0xFFFF || r == utf8.RuneError {
+		if (r < 0x20 && r != '\t' && r != '\n' && r != '\r') || r == 0xFFFE || r == 0xFFFF {
 			return r, true
 		}
 	}
@@ -195,7 +193,7 @@ func MediaFolder(itemType string) (string, bool) {
 	switch itemType {
 	case ItemImage:
 		return FolderImages, true
-	case ItemAudio, "voice":
+	case ItemAudio:
 		return FolderAudio, true
 	case ItemVideo:
 		return FolderVideo, true

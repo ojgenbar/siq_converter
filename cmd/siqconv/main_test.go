@@ -26,3 +26,11 @@ func TestParseArgsAcceptsTrailingFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestHelp(t *testing.T) {
+	for _, args := range [][]string{{"help"}, {"-h"}, {"--help"}, {"pack", "-h"}} {
+		if err := run(args); err != nil {
+			t.Errorf("%v: %v", args, err)
+		}
+	}
+}

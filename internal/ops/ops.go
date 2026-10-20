@@ -67,12 +67,13 @@ func Unpack(in, out string, force bool) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	replace := false
 	if entries, err := os.ReadDir(out); err == nil && len(entries) > 0 {
 		if !force {
 			return nil, fmt.Errorf("%s: %w (folder is not empty)", out, ErrExists)
 		}
-		// Overwriting deletes the folder, so only ever delete an unpacked package,
-		// and never the folder holding the archive being unpacked.
+		// Overwriting replaces the folder, so only ever replace an unpacked
+		// package, and never the folder holding the archive being unpacked.
 		absIn, err1 := filepath.Abs(in)
 		absOut, err2 := filepath.Abs(out)
 		if err1 != nil || err2 != nil || within(absIn, absOut) {
@@ -81,12 +82,40 @@ func Unpack(in, out string, force bool) (*Result, error) {
 		if _, err := os.Stat(filepath.Join(out, archive.ContentYAML)); err != nil {
 			return nil, fmt.Errorf("%s: refusing to delete a folder that is not an unpacked package (it has no %s); choose an empty or new folder", out, archive.ContentYAML)
 		}
-		if err := os.RemoveAll(out); err != nil {
+		replace = true
+	}
+
+	// Unpack next to the target first; the old folder is only swapped out once
+	// the new one is complete, so a failure (e.g. a full disk) loses nothing.
+	parent := filepath.Dir(filepath.Clean(out))
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return nil, err
+	}
+	tmp, err := os.MkdirTemp(parent, "."+filepath.Base(filepath.Clean(out))+".unpacking-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmp)
+	if err := archive.WriteDir(tmp, b); err != nil {
+		return nil, err
+	}
+	if replace {
+		old := tmp + ".old"
+		if err := os.Rename(out, old); err != nil {
 			return nil, err
 		}
-	}
-	if err := archive.WriteDir(out, b); err != nil {
-		return nil, err
+		if err := os.Rename(tmp, out); err != nil {
+			os.Rename(old, out)
+			return nil, err
+		}
+		if err := os.RemoveAll(old); err != nil {
+			return nil, fmt.Errorf("unpacked, but could not remove the previous version at %s: %w", old, err)
+		}
+	} else {
+		os.Remove(out) // an existing empty folder; Rename cannot replace it on Windows
+		if err := os.Rename(tmp, out); err != nil {
+			return nil, err
+		}
 	}
 	return &Result{Out: out, Files: len(b.Files)}, nil
 }
@@ -109,10 +138,12 @@ func Pack(in, out string, force bool) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	skipped := excludeArchives(b, in, out)
 	warnings, err := archive.Check(b)
 	if err != nil {
 		return nil, err
 	}
+	warnings = append(skipped, warnings...)
 	if b.Package.ID == "" {
 		b.Package.ID = newUUID()
 	}
@@ -120,6 +151,25 @@ func Pack(in, out string, force bool) (*Result, error) {
 		return nil, err
 	}
 	return &Result{Out: out, Files: len(b.Files), Warnings: warnings}, nil
+}
+
+// excludeArchives drops .siq files from the package folder: the output itself
+// (when it is written inside the folder) and older archives, which would
+// otherwise be packed into the new archive on every repack.
+func excludeArchives(b *archive.Bundle, in, out string) (warnings []string) {
+	absOut, _ := filepath.Abs(out)
+	var kept []archive.File
+	for _, f := range b.Files {
+		if !strings.EqualFold(filepath.Ext(f.Path), ".siq") {
+			kept = append(kept, f)
+			continue
+		}
+		if abs, _ := filepath.Abs(filepath.Join(in, filepath.FromSlash(f.Path))); abs != absOut {
+			warnings = append(warnings, "skipped "+f.Path+": .siq archives inside the package folder are not packed")
+		}
+	}
+	b.Files = kept
+	return warnings
 }
 
 // Init creates a new package folder with example questions of every type.
@@ -204,11 +254,15 @@ func Verify(in string) (string, error) {
 	// Files must be byte-identical.
 	want := map[string]string{}
 	for _, f := range orig.Files {
-		want[f.Path] = archive.Hash(f.Data)
+		if want[f.Path], err = f.Hash(); err != nil {
+			return "", err
+		}
 	}
 	got := map[string]string{}
 	for _, f := range back.Files {
-		got[f.Path] = archive.Hash(f.Data)
+		if got[f.Path], err = f.Hash(); err != nil {
+			return "", err
+		}
 	}
 	for p, h := range want {
 		if got[p] == "" {

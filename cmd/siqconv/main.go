@@ -38,10 +38,18 @@ func run(args []string) error {
 		return errors.New("no command given")
 	}
 	cmd, rest := args[0], args[1:]
+	switch cmd {
+	case "help", "-h", "-help", "--help":
+		fmt.Print(usage)
+		return nil
+	}
 	fset := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	force := fset.Bool("f", false, "overwrite output")
 	fset.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	pos, err := parseArgs(fset, rest)
+	if errors.Is(err, flag.ErrHelp) {
+		return nil // `siqconv pack -h`: usage was printed
+	}
 	if err != nil {
 		return err
 	}
@@ -78,9 +86,6 @@ func run(args []string) error {
 			return err
 		}
 		fmt.Println(summary)
-		return nil
-	case "help", "-h", "--help":
-		fmt.Print(usage)
 		return nil
 	}
 	fmt.Fprint(os.Stderr, usage)

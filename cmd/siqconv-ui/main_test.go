@@ -36,6 +36,13 @@ func TestUI(t *testing.T) {
 		t.Errorf("dropping .siq: unpackIn=%q unpackOut=%q tab=%d", u.unpackIn.Text, u.unpackOut.Text, u.tabs.SelectedIndex())
 	}
 
+	// A chosen output folder survives picking another input.
+	u.unpackOut.SetText("/chosen/folder")
+	u.dropped(fyne.Position{}, []fyne.URI{storage.NewFileURI("/tmp/other.siq")})
+	if u.unpackOut.Text != "/chosen/folder" {
+		t.Errorf("chosen output was replaced by %q", u.unpackOut.Text)
+	}
+
 	u.newName.SetText("Банановая солянка")
 	dir := os.Getenv("SIQCONV_UI_SHOTS")
 	if dir == "" {

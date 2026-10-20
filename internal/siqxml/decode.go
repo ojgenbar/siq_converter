@@ -32,7 +32,7 @@ func decodePackage(n *node) (*model.Package, error) {
 	}
 	p := &model.Package{}
 	p.Version, _ = n.attr("version")
-	if v, err := strconv.ParseFloat(p.Version, 64); err != nil || v < 5 {
+	if v, err := strconv.ParseFloat(p.Version, 64); err != nil || v != 5 {
 		return nil, fmt.Errorf("%s: unsupported package version %q (only SIQ version 5 is supported)", n.Path, p.Version)
 	}
 	p.Name, _ = n.attr("name")

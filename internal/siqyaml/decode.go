@@ -174,7 +174,7 @@ func decodePackage(n *yaml.Node) (*model.Package, error) {
 		case "siq":
 			p.Version, err = scalar(v, k)
 			if err == nil {
-				if fv, perr := strconv.ParseFloat(p.Version, 64); perr != nil || fv < 5 {
+				if fv, perr := strconv.ParseFloat(p.Version, 64); perr != nil || fv != 5 {
 					err = errAt(v, "unsupported siq version %q (only 5 is supported)", p.Version)
 				}
 			}

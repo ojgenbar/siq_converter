@@ -77,7 +77,7 @@ func TestWhitespaceAndSpecialStrings(t *testing.T) {
 	values := []string{
 		"", " ", "  lead", "trail  ", "a\nb", "a\n", "\nlead newline", "a \nb", "tab\there",
 		"yes", "no", "null", "~", "1", "1.0", "0x1F", "true", "- dash", "# hash", "key: value",
-		"'quote", `"dq`, `back\slash`, `\U0001F412 literal escape`, "🐒 emoji", "a\r\nb", " nbsp",
+		"'quote", `"dq`, `back\slash`, `\U0001F412 literal escape`, "🐒 emoji", "a\r\nb", " nbsp", "replacement \uFFFD char",
 	}
 	for _, v := range values {
 		p := &model.Package{Version: model.Version, Name: v, Info: model.Info{Comments: v}, Rounds: []model.Round{{
@@ -150,6 +150,7 @@ func TestStrictErrors(t *testing.T) {
 		"two item types":    "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              question:\n                - image: a\n                  audio: b\n            right: a\n",
 		"duplicate key":     "name: x\nname: y\n",
 		"bad version":       "siq: 4\nname: x\n",
+		"future version":    "siq: 6\nname: x\n",
 		"item type typo":    "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              question:\n                - imge: a.jpg\n            right: a\n",
 		"form feed":         "name: \"page\\fbreak\"\nrounds: []\n",
 		"vertical tab key":  "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              \"a\\vb\": c\n            right: a\n",
