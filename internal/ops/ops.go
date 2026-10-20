@@ -31,8 +31,31 @@ type Result struct {
 // UnpackTarget returns the default output folder for a .siq file.
 func UnpackTarget(in string) string { return strings.TrimSuffix(in, filepath.Ext(in)) }
 
-// PackTarget returns the default output .siq file for a package folder.
-func PackTarget(in string) string { return filepath.Clean(in) + ".siq" }
+// PackTarget returns the default output .siq file for a package folder: next
+// to the folder, named after it. "." and other relative paths are resolved
+// first, so `pack .` gives "<folder name>.siq" rather than "..siq".
+func PackTarget(in string) string {
+	dir := packageDir(in)
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	return filepath.Join(filepath.Dir(dir), filepath.Base(dir)+".siq")
+}
+
+// packageDir accepts a package folder or its content.yaml.
+func packageDir(in string) string {
+	in = filepath.Clean(in)
+	if filepath.Base(in) == archive.ContentYAML {
+		return filepath.Dir(in)
+	}
+	return in
+}
+
+// within reports whether path is dir itself or lies inside it.
+func within(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
 
 // Unpack converts a .siq into a folder with content.yaml and media.
 // With force, an existing output folder is removed first.
@@ -48,6 +71,16 @@ func Unpack(in, out string, force bool) (*Result, error) {
 		if !force {
 			return nil, fmt.Errorf("%s: %w (folder is not empty)", out, ErrExists)
 		}
+		// Overwriting deletes the folder, so only ever delete an unpacked package,
+		// and never the folder holding the archive being unpacked.
+		absIn, err1 := filepath.Abs(in)
+		absOut, err2 := filepath.Abs(out)
+		if err1 != nil || err2 != nil || within(absIn, absOut) {
+			return nil, fmt.Errorf("%s: refusing to delete the folder that contains %s; choose another output folder", out, in)
+		}
+		if _, err := os.Stat(filepath.Join(out, archive.ContentYAML)); err != nil {
+			return nil, fmt.Errorf("%s: refusing to delete a folder that is not an unpacked package (it has no %s); choose an empty or new folder", out, archive.ContentYAML)
+		}
 		if err := os.RemoveAll(out); err != nil {
 			return nil, err
 		}
@@ -61,10 +94,7 @@ func Unpack(in, out string, force bool) (*Result, error) {
 // Pack converts a package folder into a .siq. A missing package id is
 // generated; files the package references must exist.
 func Pack(in, out string, force bool) (*Result, error) {
-	in = filepath.Clean(in)
-	if filepath.Base(in) == archive.ContentYAML {
-		in = filepath.Dir(in)
-	}
+	in = packageDir(in)
 	if out == "" {
 		out = PackTarget(in)
 	}

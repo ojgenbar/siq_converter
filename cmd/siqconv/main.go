@@ -41,10 +41,10 @@ func run(args []string) error {
 	fset := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	force := fset.Bool("f", false, "overwrite output")
 	fset.Usage = func() { fmt.Fprint(os.Stderr, usage) }
-	if err := fset.Parse(rest); err != nil {
+	pos, err := parseArgs(fset, rest)
+	if err != nil {
 		return err
 	}
-	pos := fset.Args()
 	if len(pos) < 1 || len(pos) > 2 {
 		fset.Usage()
 		return fmt.Errorf("%s: expected 1 or 2 arguments", cmd)
@@ -85,6 +85,29 @@ func run(args []string) error {
 	}
 	fmt.Fprint(os.Stderr, usage)
 	return fmt.Errorf("unknown command %q", cmd)
+}
+
+// parseArgs accepts flags before, between and after positional arguments
+// (`pack dir -f`); everything after "--" is positional.
+func parseArgs(fset *flag.FlagSet, args []string) ([]string, error) {
+	var tail []string
+	for i, a := range args {
+		if a == "--" {
+			args, tail = args[:i], args[i+1:]
+			break
+		}
+	}
+	var pos []string
+	for {
+		if err := fset.Parse(args); err != nil {
+			return nil, err
+		}
+		args = fset.Args()
+		if len(args) == 0 {
+			return append(pos, tail...), nil
+		}
+		pos, args = append(pos, args[0]), args[1:]
+	}
 }
 
 func unpack(in, out string, force bool) error {

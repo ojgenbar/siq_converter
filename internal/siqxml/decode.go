@@ -482,6 +482,9 @@ func decodeItem(n *node) (model.Item, error) {
 		return it, err
 	}
 	it.Type, _ = n.attr("type")
+	if it.Type != "" && !model.IsItemType(it.Type) {
+		return it, fmt.Errorf("%s: unknown item type %q (known: %s)", n.Path, it.Type, strings.Join(model.ItemTypes, ", "))
+	}
 	if it.Type == model.ItemText {
 		it.Type = ""
 	}

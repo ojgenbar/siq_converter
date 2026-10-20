@@ -41,7 +41,11 @@ func Init(dir string) error {
 	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	content, err := Content(filepath.Base(filepath.Clean(dir)), time.Now())
+	name := filepath.Clean(dir)
+	if abs, err := filepath.Abs(name); err == nil {
+		name = abs // so that "." is named after the actual folder
+	}
+	content, err := Content(filepath.Base(name), time.Now())
 	if err != nil {
 		return err
 	}

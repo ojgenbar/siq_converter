@@ -20,7 +20,26 @@ func Decode(data []byte) (*model.Package, error) {
 	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
 		return nil, fmt.Errorf("empty YAML document")
 	}
+	if err := checkChars(&doc); err != nil {
+		return nil, err
+	}
 	return decodePackage(doc.Content[0])
+}
+
+// checkChars rejects characters XML cannot hold (e.g. form feed from text
+// pasted out of a PDF): SIGame could not open a package containing them.
+func checkChars(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		if r, bad := model.InvalidXMLRune(n.Value); bad {
+			return errAt(n, "text contains the control character %U, which SIGame cannot read; remove it: %q", r, n.Value)
+		}
+	}
+	for _, c := range n.Content {
+		if err := checkChars(c); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func errAt(n *yaml.Node, format string, args ...any) error {
@@ -529,8 +548,11 @@ func decodeItem(n *yaml.Node) (model.Item, error) {
 			wait, err = boolean(f.val, keyWait)
 			it.NoWait = !wait
 		default:
+			if !model.IsItemType(f.key.Value) {
+				return it, errAt(f.key, "item: unknown key %q (types: %s; other keys: ref, placement, wait, duration)", f.key.Value, strings.Join(model.ItemTypes, ", "))
+			}
 			if typeField != nil {
-				return it, errAt(f.key, "item has two type keys: %q and %q (other allowed keys: ref, placement, wait, duration)", typeField.key.Value, f.key.Value)
+				return it, errAt(f.key, "item has two type keys: %q and %q", typeField.key.Value, f.key.Value)
 			}
 			typeField = &fs[i]
 		}
@@ -539,7 +561,7 @@ func decodeItem(n *yaml.Node) (model.Item, error) {
 		}
 	}
 	if typeField == nil {
-		return it, errAt(n, "item needs a type key such as text, image, audio, video or html")
+		return it, errAt(n, "item needs a type key: %s", strings.Join(model.ItemTypes, ", "))
 	}
 	itemType := typeField.key.Value
 	if it.Value, err = scalar(typeField.val, "item "+itemType); err != nil {

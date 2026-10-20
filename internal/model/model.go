@@ -6,6 +6,8 @@
 // semantically equal packages compare equal with reflect.DeepEqual.
 package model
 
+import "unicode/utf8"
+
 // Version is the SIQ format version this model describes.
 const Version = "5"
 
@@ -154,6 +156,30 @@ func NormalizeRight(right []string) []string {
 		return nil
 	}
 	return right
+}
+
+// ItemTypes lists the content item types SIGame knows.
+var ItemTypes = []string{ItemText, ItemImage, ItemAudio, ItemVideo, ItemHTML}
+
+// IsItemType reports whether t is a known content item type.
+func IsItemType(t string) bool {
+	for _, v := range ItemTypes {
+		if v == t {
+			return true
+		}
+	}
+	return false
+}
+
+// InvalidXMLRune returns the first rune in s that XML 1.0 cannot contain
+// (control characters other than tab, newline and carriage return, U+FFFE, U+FFFF).
+func InvalidXMLRune(s string) (rune, bool) {
+	for _, r := range s {
+		if (r < 0x20 && r != '\t' && r != '\n' && r != '\r') || r == 0xFFFE || r == 0xFFFF || r == utf8.RuneError {
+			return r, true
+		}
+	}
+	return 0, false
 }
 
 // DefaultPlacement returns the placement SIGame assumes when none is given.

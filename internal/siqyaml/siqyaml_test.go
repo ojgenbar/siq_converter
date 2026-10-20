@@ -150,6 +150,9 @@ func TestStrictErrors(t *testing.T) {
 		"two item types":    "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              question:\n                - image: a\n                  audio: b\n            right: a\n",
 		"duplicate key":     "name: x\nname: y\n",
 		"bad version":       "siq: 4\nname: x\n",
+		"item type typo":    "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              question:\n                - imge: a.jpg\n            right: a\n",
+		"form feed":         "name: \"page\\fbreak\"\nrounds: []\n",
+		"vertical tab key":  "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              \"a\\vb\": c\n            right: a\n",
 		"bad param mapping": "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              p: {foo: 1}\n            right: a\n",
 	}
 	for name, src := range cases {

@@ -103,3 +103,21 @@ func TestInitCoversAllTypesAndPacks(t *testing.T) {
 		t.Error("package changed after pack")
 	}
 }
+
+func TestInitDotIsNamedAfterFolder(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "Quiz night")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	if err := Init("."); err != nil {
+		t.Fatal(err)
+	}
+	b, err := archive.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Package.Name != "Quiz night" {
+		t.Errorf("name = %q", b.Package.Name)
+	}
+}

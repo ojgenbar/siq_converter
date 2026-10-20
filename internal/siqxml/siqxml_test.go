@@ -64,6 +64,7 @@ func TestDecodeRejectsUnknownData(t *testing.T) {
 		"v4 version":        `<package name="x" version="4" />`,
 		"bad bool":          head + `<question price="1"><params><param name="q" type="content"><item isRef="maybe">a</item></param></params><right /></question>` + tail,
 		"duplicate param":   head + `<question price="1"><params><param name="a">1</param><param name="a">2</param></params><right /></question>` + tail,
+		"unknown item type": head + `<question price="1"><params><param name="q" type="content"><item type="imge" isRef="True">a.jpg</item></param></params><right /></question>` + tail,
 		"text in content":   head + `<question price="1"><params><param name="q" type="content">stray<item>a</item></param></params><right /></question>` + tail,
 	}
 	for name, src := range cases {
