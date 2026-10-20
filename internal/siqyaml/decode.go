@@ -207,6 +207,9 @@ func decodePackage(n *yaml.Node) (*model.Package, error) {
 		case "difficulty":
 			if !isNull(v) {
 				p.Difficulty, err = integer(v, k)
+				if err == nil && p.Difficulty < 0 {
+					err = errAt(v, "difficulty must not be negative, got %d", p.Difficulty)
+				}
 			}
 		case "logo":
 			p.Logo, err = scalar(v, k)

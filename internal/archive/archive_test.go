@@ -177,3 +177,20 @@ func TestWriteSIQFailureKeepsExistingArchive(t *testing.T) {
 		t.Errorf("temporary files left behind: %v", entries)
 	}
 }
+
+func TestReadDirIgnoresContentYAMLCasing(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Content.yaml"), []byte("name: x\nrounds: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ContentYAML)); err != nil {
+		t.Skip("case-sensitive filesystem")
+	}
+	b, err := ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.Files) != 0 {
+		t.Errorf("Content.yaml was packed as a package file: %v", b.Files)
+	}
+}

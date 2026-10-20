@@ -51,24 +51,10 @@ func packageDir(in string) string {
 	return in
 }
 
-// realPath resolves a path to its absolute form with symlinks evaluated, so
-// that an alias of a folder is recognized as that folder.
-func realPath(p string) (string, error) {
-	abs, err := filepath.Abs(p)
-	if err != nil {
-		return "", err
-	}
-	return filepath.EvalSymlinks(abs)
-}
-
-// within reports whether path is dir itself or lies inside it.
-func within(path, dir string) bool {
-	rel, err := filepath.Rel(dir, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
 // Unpack converts a .siq into a folder with content.yaml and media.
-// With force, an existing output folder is removed first.
+// With force, an existing unpacked package in the output folder is replaced.
+// The output folder itself is kept (so "." works and open windows stay valid);
+// only its contents are swapped, after the new contents are fully written.
 func Unpack(in, out string, force bool) (*Result, error) {
 	if out == "" {
 		out = UnpackTarget(in)
@@ -87,11 +73,9 @@ func Unpack(in, out string, force bool) (*Result, error) {
 		if !force {
 			return nil, fmt.Errorf("%s: %w (folder is not empty)", out, ErrExists)
 		}
-		// Overwriting replaces the folder, so only ever replace an unpacked
-		// package, and never the folder holding the archive being unpacked.
-		realIn, err1 := realPath(in)
-		realOut, err2 := realPath(out)
-		if err1 != nil || err2 != nil || within(realIn, realOut) {
+		// Overwriting deletes the folder's contents, so only ever replace an
+		// unpacked package, and never the folder holding the archive itself.
+		if inside, err := insideDir(in, out); err != nil || inside {
 			return nil, fmt.Errorf("%s: refusing to delete the folder that contains %s; choose another output folder", out, in)
 		}
 		if _, err := os.Stat(filepath.Join(out, archive.ContentYAML)); err != nil {
@@ -100,39 +84,123 @@ func Unpack(in, out string, force bool) (*Result, error) {
 		replace = true
 	}
 
-	// Unpack next to the target first; the old folder is only swapped out once
-	// the new one is complete, so a failure (e.g. a full disk) loses nothing.
-	parent := filepath.Dir(filepath.Clean(out))
-	if err := os.MkdirAll(parent, 0o755); err != nil {
-		return nil, err
-	}
-	tmp, err := os.MkdirTemp(parent, "."+filepath.Base(filepath.Clean(out))+".unpacking-")
+	// Write the new contents next to the output folder first, so a failure
+	// (e.g. a full disk) leaves the existing package untouched.
+	absOut, err := filepath.Abs(out)
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(tmp)
-	if err := archive.WriteDir(tmp, b); err != nil {
+	parent := filepath.Dir(absOut)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return nil, err
 	}
-	if replace {
-		old := tmp + ".old"
-		if err := os.Rename(out, old); err != nil {
-			return nil, err
-		}
-		if err := os.Rename(tmp, out); err != nil {
-			os.Rename(old, out)
-			return nil, err
-		}
-		if err := os.RemoveAll(old); err != nil {
-			return nil, fmt.Errorf("unpacked, but could not remove the previous version at %s: %w", old, err)
-		}
-	} else {
-		os.Remove(out) // an existing empty folder; Rename cannot replace it on Windows
-		if err := os.Rename(tmp, out); err != nil {
-			return nil, err
-		}
+	staged, err := os.MkdirTemp(parent, "."+filepath.Base(absOut)+".unpacking-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(staged)
+	if err := archive.WriteDir(staged, b); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(absOut, 0o755); err != nil {
+		return nil, err
+	}
+	if err := swapContents(absOut, staged, replace); err != nil {
+		return nil, err
 	}
 	return &Result{Out: out, Files: len(b.Files)}, nil
+}
+
+// swapContents moves the entries of staged into dir. With replace, dir's
+// current entries are first moved to a backup folder, restored if anything
+// fails, and deleted at the end.
+func swapContents(dir, staged string, replace bool) error {
+	backup := ""
+	if replace {
+		backup = staged + ".previous"
+		if err := os.Mkdir(backup, 0o755); err != nil {
+			return err
+		}
+		if moved, err := moveEntries(dir, backup); err != nil {
+			if _, rerr := moveNames(backup, dir, moved); rerr != nil {
+				return fmt.Errorf("%w; restoring the previous package also failed (%v): its files are in %s", err, rerr, backup)
+			}
+			os.Remove(backup)
+			return err
+		}
+	}
+	if moved, err := moveEntries(staged, dir); err != nil {
+		for _, name := range moved {
+			os.RemoveAll(filepath.Join(dir, name))
+		}
+		if backup == "" {
+			return err
+		}
+		if _, rerr := moveEntries(backup, dir); rerr != nil {
+			return fmt.Errorf("%w; restoring the previous package also failed (%v): its files are in %s", err, rerr, backup)
+		}
+		os.Remove(backup)
+		return err
+	}
+	if backup != "" {
+		if err := os.RemoveAll(backup); err != nil {
+			return fmt.Errorf("unpacked, but could not remove the previous package at %s: %w", backup, err)
+		}
+	}
+	return nil
+}
+
+// moveEntries renames every entry of from into to, returning the names moved
+// so far (also on error).
+func moveEntries(from, to string) ([]string, error) {
+	entries, err := os.ReadDir(from)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name()
+	}
+	return moveNames(from, to, names)
+}
+
+// rename is os.Rename; tests replace it to simulate failures.
+var rename = os.Rename
+
+func moveNames(from, to string, names []string) ([]string, error) {
+	var moved []string
+	for _, name := range names {
+		if err := rename(filepath.Join(from, name), filepath.Join(to, name)); err != nil {
+			return moved, err
+		}
+		moved = append(moved, name)
+	}
+	return moved, nil
+}
+
+// insideDir reports whether path is dir or lies inside it. It compares
+// filesystem identities rather than strings, so symlinks and differently
+// cased names on case-insensitive filesystems are seen through.
+func insideDir(path, dir string) (bool, error) {
+	dirInfo, err := os.Stat(dir)
+	if err != nil {
+		return false, err
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return false, err
+	}
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = real
+	}
+	for p := abs; ; p = filepath.Dir(p) {
+		if info, err := os.Stat(p); err == nil && os.SameFile(info, dirInfo) {
+			return true, nil
+		}
+		if filepath.Dir(p) == p {
+			return false, nil
+		}
+	}
 }
 
 // Pack converts a package folder into a .siq. A missing package id is
@@ -153,7 +221,7 @@ func Pack(in, out string, force bool) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	skipped := excludeArchives(b, in, out)
+	skipped := excludeArchives(b, out)
 	warnings, err := archive.Check(b)
 	if err != nil {
 		return nil, err
@@ -171,17 +239,18 @@ func Pack(in, out string, force bool) (*Result, error) {
 // excludeArchives drops .siq files from the package folder: the output itself
 // (when it is written inside the folder) and older archives, which would
 // otherwise be packed into the new archive on every repack.
-func excludeArchives(b *archive.Bundle, in, out string) (warnings []string) {
-	absOut, _ := filepath.Abs(out)
+func excludeArchives(b *archive.Bundle, out string) (warnings []string) {
+	outInfo, outErr := os.Stat(out)
 	var kept []archive.File
 	for _, f := range b.Files {
 		if !strings.EqualFold(filepath.Ext(f.Path), ".siq") {
 			kept = append(kept, f)
 			continue
 		}
-		if abs, _ := filepath.Abs(filepath.Join(in, filepath.FromSlash(f.Path))); abs != absOut {
-			warnings = append(warnings, "skipped "+f.Path+": .siq archives inside the package folder are not packed")
+		if info, err := os.Stat(f.Src); outErr == nil && err == nil && os.SameFile(info, outInfo) {
+			continue // the archive being written
 		}
+		warnings = append(warnings, "skipped "+f.Path+": .siq archives inside the package folder are not packed")
 	}
 	b.Files = kept
 	return warnings

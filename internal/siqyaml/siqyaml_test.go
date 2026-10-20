@@ -151,6 +151,7 @@ func TestStrictErrors(t *testing.T) {
 		"duplicate key":            "name: x\nname: y\n",
 		"bad version":              "siq: 4\nname: x\n",
 		"future version":           "siq: 6\nname: x\n",
+		"negative difficulty":      "name: x\ndifficulty: -1\nrounds: []\n",
 		"item type typo":           "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              question:\n                - imge: a.jpg\n            right: a\n",
 		"form feed":                "name: \"page\\fbreak\"\nrounds: []\n",
 		"vertical tab key":         "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              \"a\\vb\": c\n            right: a\n",

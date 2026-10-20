@@ -315,6 +315,10 @@ func ReadDir(dir string) (*Bundle, error) {
 	if b.Package, err = siqyaml.Decode(data); err != nil {
 		return nil, fmt.Errorf("%s: %w", ContentYAML, err)
 	}
+	// WalkDir does not follow a symlinked root, so resolve it first.
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = real
+	}
 	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -333,7 +337,8 @@ func ReadDir(dir string) (*Bundle, error) {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
-		if rel == ContentYAML || rel == ContentXML {
+		// Case-insensitive filesystems open "Content.yaml" as content.yaml.
+		if strings.EqualFold(rel, ContentYAML) || strings.EqualFold(rel, ContentXML) {
 			return nil
 		}
 		info, err := d.Info()

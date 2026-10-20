@@ -171,3 +171,95 @@ func TestUnpackGuardSeesThroughSymlinks(t *testing.T) {
 		t.Fatal("source archive was deleted through a symlink")
 	}
 }
+
+func TestUnpackGuardIgnoresCase(t *testing.T) {
+	tmp := t.TempDir()
+	real := filepath.Join(tmp, "Real")
+	os.MkdirAll(real, 0o755)
+	siq := minimalSIQ(t, real)
+	os.WriteFile(filepath.Join(real, archive.ContentYAML), []byte("name: x\n"), 0o644)
+	lower := filepath.Join(tmp, "real")
+	if _, err := os.Stat(lower); err != nil {
+		t.Skip("case-sensitive filesystem")
+	}
+	if _, err := Unpack(siq, lower, true); err == nil {
+		t.Error("expected the guard to refuse the differently cased folder holding the archive")
+	}
+	if _, err := os.Stat(siq); err != nil {
+		t.Fatal("source archive was deleted")
+	}
+}
+
+func TestUnpackIntoCurrentFolder(t *testing.T) {
+	tmp := t.TempDir()
+	siq := minimalSIQ(t, tmp)
+	dir := filepath.Join(tmp, "here")
+	os.MkdirAll(dir, 0o755)
+	before, _ := os.Stat(dir)
+	t.Chdir(dir)
+	if _, err := Unpack(siq, ".", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Unpack(siq, ".", true); err != nil {
+		t.Fatalf("forced unpack into .: %v", err)
+	}
+	after, err := os.Stat(dir)
+	if err != nil || !os.SameFile(before, after) {
+		t.Error("the output folder itself was replaced; open terminals would lose it")
+	}
+	if _, err := os.Stat(filepath.Join(dir, archive.ContentYAML)); err != nil {
+		t.Error("content.yaml missing after unpacking into .")
+	}
+	if entries, _ := os.ReadDir(tmp); len(entries) != 2 {
+		t.Errorf("staging folders left behind: %v", entries)
+	}
+}
+
+func TestPackThroughSymlinkedFolder(t *testing.T) {
+	tmp := t.TempDir()
+	siq := minimalSIQ(t, tmp)
+	real := filepath.Join(tmp, "real")
+	if _, err := Unpack(siq, real, false); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(tmp, "alias")
+	if err := os.Symlink(real, alias); err != nil {
+		t.Skip("symlinks not supported:", err)
+	}
+	res, err := Pack(alias, filepath.Join(tmp, "out.siq"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Files != 2 {
+		t.Errorf("packed %d files through the symlink, want 2", res.Files)
+	}
+}
+
+func TestFailedRollbackReportsBackup(t *testing.T) {
+	tmp := t.TempDir()
+	dir, staged := filepath.Join(tmp, "pkg"), filepath.Join(tmp, ".pkg.unpacking-1")
+	os.MkdirAll(dir, 0o755)
+	os.MkdirAll(staged, 0o755)
+	os.WriteFile(filepath.Join(dir, archive.ContentYAML), []byte("old"), 0o644)
+	os.WriteFile(filepath.Join(staged, archive.ContentYAML), []byte("new"), 0o644)
+
+	// Moving the old package out works; moving the new one in and restoring both fail.
+	calls := 0
+	rename = func(from, to string) error {
+		calls++
+		if calls == 1 {
+			return os.Rename(from, to)
+		}
+		return errors.New("disk on fire")
+	}
+	defer func() { rename = os.Rename }()
+
+	err := swapContents(dir, staged, true)
+	backup := staged + ".previous"
+	if err == nil || !strings.Contains(err.Error(), "restoring the previous package also failed") || !strings.Contains(err.Error(), backup) {
+		t.Fatalf("error should report both failures and the backup location, got: %v", err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(backup, archive.ContentYAML)); string(data) != "old" {
+		t.Error("previous package is not in the reported backup folder")
+	}
+}
