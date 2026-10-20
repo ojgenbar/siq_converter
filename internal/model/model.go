@@ -94,7 +94,7 @@ type SourceInfo struct {
 	ID      string
 	Author  string
 	Title   string
-	Year    string
+	Year    int // 0 means absent; SIGame stores it as an integer
 	Publish string
 	City    string
 }
@@ -145,6 +145,15 @@ type Item struct {
 	Placement string // "" means the default placement for the type
 	Duration  string
 	NoWait    bool // waitForFinish="False"
+}
+
+// NormalizeRight maps a single empty right answer to no answers: SIGame adds
+// one empty answer to a question without any, so the two are equivalent.
+func NormalizeRight(right []string) []string {
+	if len(right) == 1 && right[0] == "" {
+		return nil
+	}
+	return right
 }
 
 // DefaultPlacement returns the placement SIGame assumes when none is given.

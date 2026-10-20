@@ -174,8 +174,9 @@ func decodeGlobal(n *node) (model.Global, error) {
 		return g, err
 	}
 	if authors != nil {
-		err := decodeGlobalList(authors, "Author", []string{"Name", "SecondName", "Surname", "Country", "City"}, func(id string, f map[string]string) {
+		err := decodeGlobalList(authors, "Author", []string{"Name", "SecondName", "Surname", "Country", "City"}, func(id string, f map[string]string) error {
 			g.Authors = append(g.Authors, model.AuthorInfo{ID: id, Name: f["Name"], SecondName: f["SecondName"], Surname: f["Surname"], Country: f["Country"], City: f["City"]})
+			return nil
 		})
 		if err != nil {
 			return g, err
@@ -186,8 +187,17 @@ func decodeGlobal(n *node) (model.Global, error) {
 		return g, err
 	}
 	if sources != nil {
-		err := decodeGlobalList(sources, "Source", []string{"Author", "Title", "Year", "Publish", "City"}, func(id string, f map[string]string) {
-			g.Sources = append(g.Sources, model.SourceInfo{ID: id, Author: f["Author"], Title: f["Title"], Year: f["Year"], Publish: f["Publish"], City: f["City"]})
+		err := decodeGlobalList(sources, "Source", []string{"Author", "Title", "Year", "Publish", "City"}, func(id string, f map[string]string) error {
+			year := 0
+			if y := strings.TrimSpace(f["Year"]); y != "" {
+				v, err := strconv.Atoi(y)
+				if err != nil {
+					return fmt.Errorf("%s: global source %q: Year must be an integer, got %q", sources.Path, id, f["Year"])
+				}
+				year = v
+			}
+			g.Sources = append(g.Sources, model.SourceInfo{ID: id, Author: f["Author"], Title: f["Title"], Year: year, Publish: f["Publish"], City: f["City"]})
+			return nil
 		})
 		if err != nil {
 			return g, err
@@ -196,7 +206,7 @@ func decodeGlobal(n *node) (model.Global, error) {
 	return g, nil
 }
 
-func decodeGlobalList(n *node, item string, fields []string, add func(id string, f map[string]string)) error {
+func decodeGlobalList(n *node, item string, fields []string, add func(id string, f map[string]string) error) error {
 	if err := n.checkAttrs(); err != nil {
 		return err
 	}
@@ -227,7 +237,9 @@ func decodeGlobalList(n *node, item string, fields []string, add func(id string,
 			}
 		}
 		id, _ := c.attr("id")
-		add(id, f)
+		if err := add(id, f); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -353,6 +365,7 @@ func decodeQuestion(n *node) (model.Question, error) {
 	if q.Right, err = right.list("answer"); err != nil {
 		return q, err
 	}
+	q.Right = model.NormalizeRight(q.Right)
 	wrong, err := n.single("wrong")
 	if err != nil {
 		return q, err

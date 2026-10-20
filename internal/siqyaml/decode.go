@@ -265,7 +265,13 @@ func decodeGlobal(n *yaml.Node) (model.Global, error) {
 				if err != nil {
 					return g, err
 				}
-				g.Sources = append(g.Sources, model.SourceInfo{ID: vals["id"], Author: vals["author"], Title: vals["title"], Year: vals["year"], Publish: vals["publish"], City: vals["city"]})
+				year := 0
+				if y := strings.TrimSpace(vals["year"]); y != "" {
+					if year, err = strconv.Atoi(y); err != nil {
+						return g, errAt(e, "global source %q: year must be an integer (SIGame requirement), got %q", vals["id"], vals["year"])
+					}
+				}
+				g.Sources = append(g.Sources, model.SourceInfo{ID: vals["id"], Author: vals["author"], Title: vals["title"], Year: year, Publish: vals["publish"], City: vals["city"]})
 			}
 		}
 	}
@@ -392,6 +398,7 @@ func decodeQuestion(n *yaml.Node) (model.Question, error) {
 			return q, err
 		}
 	}
+	q.Right = model.NormalizeRight(q.Right)
 	if !hasPrice {
 		return q, errAt(n, "question: missing required key \"price\"")
 	}

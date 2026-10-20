@@ -198,8 +198,8 @@ func globalNode(g model.Global) *yaml.Node {
 			sm.add("id", str(src.ID))
 			sm.addStr("author", src.Author)
 			sm.addStr("title", src.Title)
-			if src.Year != "" {
-				sm.add("year", numericOrStr(src.Year))
+			if src.Year != 0 {
+				sm.add("year", intNode(src.Year))
 			}
 			sm.addStr("publish", src.Publish)
 			sm.addStr("city", src.City)

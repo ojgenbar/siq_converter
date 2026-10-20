@@ -88,6 +88,7 @@ func TestWhitespaceAndSpecialStrings(t *testing.T) {
 		}}}
 		if v == "" {
 			p.Info.Comments = ""
+			p.Rounds[0].Themes[0].Questions[0].Right = nil // a single empty answer means none
 		}
 		y, err := siqyaml.Encode(p)
 		if err != nil {

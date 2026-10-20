@@ -50,12 +50,15 @@ func normalize(n *node, parent *node) {
 		if droppableEmpty[c.Name] && len(c.Children) == 0 && c.Text == "" && c.Path == "" {
 			continue
 		}
-		if (n.Name == "Author" || n.Name == "Source") && len(c.Children) == 0 && c.Text == "" {
+		if (n.Name == "Author" || n.Name == "Source") && len(c.Children) == 0 && (c.Text == "" || (c.Name == "Year" && strings.TrimSpace(c.Text) == "0")) {
 			continue
 		}
 		kept = append(kept, c)
 	}
 	n.Children = kept
+	if n.Name == "right" && len(n.Children) == 1 && n.Children[0].Text == "" {
+		n.Children = nil // SIGame's implicit empty right answer
+	}
 	paramType, _ := n.attr("type")
 	structuredParam := n.Name == "param" && (paramType == "content" || paramType == "group" || paramType == "numberSet")
 	if (len(n.Children) > 0 || containers[n.Name] || structuredParam) && strings.TrimSpace(n.Text) == "" {

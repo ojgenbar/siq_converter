@@ -23,13 +23,15 @@ func TestEncodeIsCanonicalSIGameForm(t *testing.T) {
 	for _, want := range []string{
 		"\xEF\xBB\xBF<?xml version=\"1.0\" encoding=\"utf-8\"?><package name=\"Full &amp; &quot;fixture&quot;\" version=\"5\" id=",
 		`language="en-US" generator="hand" xmlns="https://github.com/VladimirKhil/SI/blob/master/assets/siq_5.xsd">`,
+		`</tags><global>`,
 		`</global><files><file name="Images/a.png" hash="AB" /></files><info>`,
+		`<Source id="s1"><Author>Pushkin</Author><Title>Onegin</Title><Year>1833</Year>`,
 		`<item type="image" isRef="True" waitForFinish="False">a b+c@2x (1).jpg</item>`,
 		`<item type="audio" isRef="True" placement="background">song.mp3</item>`,
 		`<item type="audio" isRef="True" placement="screen" duration="00:00:05">клип.mp3</item>`,
 		`<item type="image" isRef="True">explicit default.png</item>`,
 		`<param name="price" type="numberSet"><numberSet minimum="100" maximum="500" step="100" /></param>`,
-		`<right></right>`,
+		`<right><answer /></right>`,
 		`<round name=""></round>`,
 	} {
 		if !strings.Contains(s, want) {
@@ -68,5 +70,38 @@ func TestDecodeRejectsUnknownData(t *testing.T) {
 		if _, err := siqxml.Decode([]byte(src)); err == nil {
 			t.Errorf("%s: expected an error", name)
 		}
+	}
+}
+
+func TestSourceWithoutYearWritesZero(t *testing.T) {
+	// SIGame reads <Year> with ReadElementContentAsInt and fails on an empty value.
+	src := `<package name="x" version="5"><global><Sources><Source id="s"><Title>T</Title></Source></Sources></global></package>`
+	p, err := siqxml.Decode([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(siqxml.Encode(p, nil))
+	if !strings.Contains(out, "<Year>0</Year>") {
+		t.Errorf("expected <Year>0</Year> in %s", out)
+	}
+	back, err := siqxml.Decode([]byte(out))
+	if err != nil || back.Global.Sources[0].Year != 0 {
+		t.Errorf("year 0 should read back as absent: %v %+v", err, back)
+	}
+	if _, err := siqxml.Decode([]byte(strings.Replace(src, "<Title>", "<Year>soon</Year><Title>", 1))); err == nil {
+		t.Error("non-integer Year must be rejected")
+	}
+}
+
+func TestGlobalIsAlwaysFollowedByFiles(t *testing.T) {
+	// SIGame skips the element right after </global>; it must never be info or rounds.
+	src := `<package name="x" version="5"><info><comments>c</comments></info><global><Authors><Author id="a"><Name>N</Name></Author></Authors></global><rounds><round name="r" /></rounds></package>`
+	p, err := siqxml.Decode([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(siqxml.Encode(p, nil))
+	if !strings.Contains(out, "</global><files /><info>") {
+		t.Errorf("expected an empty <files /> right after </global>: %s", out)
 	}
 }

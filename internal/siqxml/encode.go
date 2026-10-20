@@ -50,6 +50,10 @@ func Encode(p *model.Package, files []FileHash) []byte {
 		}
 		w.close("tags")
 	}
+	// SIGame's reader skips the element right after </global> (Package.ReadXml
+	// does not keep the reader position there). SIGame itself writes <files>
+	// next, so follow that order and always write <files> after <global>, even
+	// empty: then only the regenerable hash list can be lost, never info or rounds.
 	if !p.Global.IsEmpty() {
 		w.global(p.Global)
 	}
@@ -59,6 +63,8 @@ func Encode(p *model.Package, files []FileHash) []byte {
 			w.empty("file", "name", f.Name, "hash", f.Hash)
 		}
 		w.close("files")
+	} else if !p.Global.IsEmpty() {
+		w.empty("files")
 	}
 	w.info(p.Info)
 	if len(p.Rounds) > 0 {
@@ -160,7 +166,7 @@ func (w *writer) global(g model.Global) {
 			w.b.WriteString(">")
 			w.leaf("Author", s.Author)
 			w.leaf("Title", s.Title)
-			w.leaf("Year", s.Year)
+			w.leaf("Year", strconv.Itoa(s.Year)) // SIGame fails on a non-integer (even empty) Year
 			w.leaf("Publish", s.Publish)
 			w.leaf("City", s.City)
 			w.close("Source")
@@ -249,6 +255,9 @@ func (w *writer) question(q model.Question) {
 		w.close("params")
 	}
 	w.open("right")
+	if len(q.Right) == 0 {
+		w.leaf("answer", "") // SIGame always keeps at least one (empty) right answer
+	}
 	for _, a := range q.Right {
 		w.leaf("answer", a)
 	}
