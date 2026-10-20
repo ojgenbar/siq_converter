@@ -144,17 +144,21 @@ rounds:
 
 func TestStrictErrors(t *testing.T) {
 	cases := map[string]string{
-		"unknown key":       "name: x\nrounds: []\ntitle: oops\n",
-		"missing name":      "rounds: []\n",
-		"missing price":     "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - right: a\n",
-		"two item types":    "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              question:\n                - image: a\n                  audio: b\n            right: a\n",
-		"duplicate key":     "name: x\nname: y\n",
-		"bad version":       "siq: 4\nname: x\n",
-		"future version":    "siq: 6\nname: x\n",
-		"item type typo":    "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              question:\n                - imge: a.jpg\n            right: a\n",
-		"form feed":         "name: \"page\\fbreak\"\nrounds: []\n",
-		"vertical tab key":  "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              \"a\\vb\": c\n            right: a\n",
-		"bad param mapping": "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              p: {foo: 1}\n            right: a\n",
+		"unknown key":              "name: x\nrounds: []\ntitle: oops\n",
+		"missing name":             "rounds: []\n",
+		"missing price":            "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - right: a\n",
+		"two item types":           "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              question:\n                - image: a\n                  audio: b\n            right: a\n",
+		"duplicate key":            "name: x\nname: y\n",
+		"bad version":              "siq: 4\nname: x\n",
+		"future version":           "siq: 6\nname: x\n",
+		"item type typo":           "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              question:\n                - imge: a.jpg\n            right: a\n",
+		"form feed":                "name: \"page\\fbreak\"\nrounds: []\n",
+		"vertical tab key":         "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              \"a\\vb\": c\n            right: a\n",
+		"raw content":              "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              question: {raw: {type: content, value: Question text}}\n            right: a\n",
+		"raw group":                "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              g: {raw: {type: group, value: x}}\n            right: a\n",
+		"raw numberSet with value": "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              price: {raw: {type: numberSet, value: \"100\"}}\n            right: a\n",
+		"second document":          "name: x\nrounds: []\n---\nname: y\n",
+		"bad param mapping":        "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              p: {foo: 1}\n            right: a\n",
 	}
 	for name, src := range cases {
 		if _, err := siqyaml.Decode([]byte(src)); err == nil {
@@ -162,5 +166,13 @@ func TestStrictErrors(t *testing.T) {
 		} else if !strings.Contains(err.Error(), "line") && name != "duplicate key" {
 			t.Logf("%s: %v", name, err)
 		}
+	}
+}
+
+func TestRawEmptyNumberSetIsAccepted(t *testing.T) {
+	// The encoder writes a numberSet parameter without a <numberSet> element this way.
+	src := "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              price: {raw: {type: numberSet, value: \"\"}}\n            right: a\n"
+	if _, err := siqyaml.Decode([]byte(src)); err != nil {
+		t.Error(err)
 	}
 }

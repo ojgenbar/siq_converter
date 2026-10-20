@@ -138,3 +138,36 @@ func TestForcedUnpackKeepsOldFolderOnFailure(t *testing.T) {
 		t.Errorf("temporary folders left behind: %v", entries)
 	}
 }
+
+func TestUnpackRefusesFileTarget(t *testing.T) {
+	tmp := t.TempDir()
+	siq := minimalSIQ(t, tmp)
+	notes := filepath.Join(tmp, "notes")
+	os.WriteFile(notes, []byte("keep me"), 0o644)
+	for _, force := range []bool{false, true} {
+		if _, err := Unpack(siq, notes, force); err == nil || !strings.Contains(err.Error(), "not a folder") {
+			t.Errorf("force=%v: %v", force, err)
+		}
+	}
+	if data, err := os.ReadFile(notes); err != nil || string(data) != "keep me" {
+		t.Error("existing file was deleted")
+	}
+}
+
+func TestUnpackGuardSeesThroughSymlinks(t *testing.T) {
+	tmp := t.TempDir()
+	real := filepath.Join(tmp, "real")
+	os.MkdirAll(real, 0o755)
+	siq := minimalSIQ(t, real)
+	os.WriteFile(filepath.Join(real, archive.ContentYAML), []byte("name: x\n"), 0o644)
+	alias := filepath.Join(tmp, "alias")
+	if err := os.Symlink(real, alias); err != nil {
+		t.Skip("symlinks not supported:", err)
+	}
+	if _, err := Unpack(filepath.Join(alias, filepath.Base(siq)), real, true); err == nil {
+		t.Error("expected the guard to refuse replacing the folder holding the archive")
+	}
+	if _, err := os.Stat(siq); err != nil {
+		t.Fatal("source archive was deleted through a symlink")
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/test"
 )
@@ -35,6 +36,10 @@ func TestUI(t *testing.T) {
 	if u.unpackIn.Text != "/tmp/some pack.siq" || u.unpackOut.Text != "/tmp/some pack" || u.tabs.SelectedIndex() != 0 {
 		t.Errorf("dropping .siq: unpackIn=%q unpackOut=%q tab=%d", u.unpackIn.Text, u.unpackOut.Text, u.tabs.SelectedIndex())
 	}
+
+	// Opening the Browse dialogs must not panic (Resize before Show did).
+	u.pickFolder(t.TempDir(), func(string) {})
+	u.showFileDialog(dialog.NewFileOpen(func(fyne.URIReadCloser, error) {}, w), t.TempDir())
 
 	// A chosen output folder survives picking another input.
 	u.unpackOut.SetText("/chosen/folder")

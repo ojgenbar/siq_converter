@@ -51,6 +51,16 @@ func packageDir(in string) string {
 	return in
 }
 
+// realPath resolves a path to its absolute form with symlinks evaluated, so
+// that an alias of a folder is recognized as that folder.
+func realPath(p string) (string, error) {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(abs)
+}
+
 // within reports whether path is dir itself or lies inside it.
 func within(path, dir string) bool {
 	rel, err := filepath.Rel(dir, path)
@@ -67,6 +77,11 @@ func Unpack(in, out string, force bool) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	if info, err := os.Stat(out); err == nil && !info.IsDir() {
+		return nil, fmt.Errorf("%s: exists and is not a folder; choose another output folder", out)
+	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
 	replace := false
 	if entries, err := os.ReadDir(out); err == nil && len(entries) > 0 {
 		if !force {
@@ -74,9 +89,9 @@ func Unpack(in, out string, force bool) (*Result, error) {
 		}
 		// Overwriting replaces the folder, so only ever replace an unpacked
 		// package, and never the folder holding the archive being unpacked.
-		absIn, err1 := filepath.Abs(in)
-		absOut, err2 := filepath.Abs(out)
-		if err1 != nil || err2 != nil || within(absIn, absOut) {
+		realIn, err1 := realPath(in)
+		realOut, err2 := realPath(out)
+		if err1 != nil || err2 != nil || within(realIn, realOut) {
 			return nil, fmt.Errorf("%s: refusing to delete the folder that contains %s; choose another output folder", out, in)
 		}
 		if _, err := os.Stat(filepath.Join(out, archive.ContentYAML)); err != nil {

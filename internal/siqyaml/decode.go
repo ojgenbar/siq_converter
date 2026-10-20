@@ -1,7 +1,10 @@
 package siqyaml
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -13,8 +16,18 @@ import (
 // Decode parses YAML produced by Encode or written by hand.
 // Unknown keys are errors, so typos never silently lose data.
 func Decode(data []byte) (*model.Package, error) {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
 	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil {
+	if err := dec.Decode(&doc); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("empty YAML document")
+		}
+		return nil, err
+	}
+	var extra yaml.Node
+	if err := dec.Decode(&extra); err == nil {
+		return nil, errAt(&extra, "a second YAML document (after ---) is not supported; keep the whole package in one document")
+	} else if !errors.Is(err, io.EOF) {
 		return nil, err
 	}
 	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
@@ -512,6 +525,16 @@ func decodeParam(name string, n *yaml.Node) (model.Param, error) {
 				p.IsRef, err = boolean(rf.val, "ref")
 			case "value":
 				p.Value, err = scalar(rf.val, "value")
+			}
+		}
+		// raw is for references and unknown types; a structured value written as
+		// raw would be packed empty, so ask for its real form instead.
+		if err == nil && !p.IsRef {
+			switch {
+			case p.Type == model.ParamContent || p.Type == model.ParamGroup:
+				err = errAt(v, "%s: a %s parameter cannot be written as raw; use a list of items (content) or {group: ...}", what, p.Type)
+			case p.Type == model.ParamNumberSet && p.Value != "":
+				err = errAt(v, "%s: a numberSet value cannot be written as raw; use {numberSet: {minimum: ..., maximum: ..., step: ...}}", what)
 			}
 		}
 	}

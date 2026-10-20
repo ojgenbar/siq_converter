@@ -356,8 +356,8 @@ func (u *ui) showFileDialog(d *dialog.FileDialog, start string) {
 			break
 		}
 	}
+	d.Show() // before Resize: Fyne's FileDialog.Resize panics on a dialog not yet shown
 	d.Resize(u.win.Canvas().Size())
-	d.Show()
 }
 
 // dropped fills the matching tab: a .siq goes to "SIQ to folder", a folder (or its content.yaml) to "Folder to SIQ".
