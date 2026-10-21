@@ -21,9 +21,13 @@ Usage:
   siqconv pack   [-f] <dir> [out.siq]     folder -> .siq
   siqconv convert [-f] <path> [out]       unpack a .siq, or pack a folder / content.yaml
   siqconv verify <in.siq>                 check that .siq -> YAML -> .siq loses nothing
+  siqconv version                         print the version
 
   -f  overwrite the output (.siq file, or remove a non-empty output folder)
 `
+
+// version is set by release builds: -ldflags "-X main.version=v1.2.3".
+var version = "dev"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -41,6 +45,9 @@ func run(args []string) error {
 	switch cmd {
 	case "help", "-h", "-help", "--help":
 		fmt.Print(usage)
+		return nil
+	case "version", "-version", "--version":
+		fmt.Println("siqconv", version)
 		return nil
 	}
 	fset := flag.NewFlagSet(cmd, flag.ContinueOnError)

@@ -22,9 +22,12 @@ import (
 	"siq_converter/internal/ops"
 )
 
+// version is set by release builds: -ldflags "-X main.version=v1.2.3".
+var version = "dev"
+
 func main() {
 	a := app.NewWithID("io.github.siq_converter")
-	w := a.NewWindow("SIQ Converter")
+	w := a.NewWindow("SIQ Converter " + version)
 	u := &ui{app: a, win: w}
 	w.SetContent(u.build())
 	w.SetOnDropped(u.dropped)
