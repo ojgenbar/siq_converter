@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"siq_converter/internal/model"
 	"siq_converter/internal/siqxml"
@@ -175,5 +176,57 @@ func TestRawEmptyNumberSetIsAccepted(t *testing.T) {
 	src := "name: x\nrounds:\n  - name: r\n    themes:\n      - name: t\n        questions:\n          - price: 1\n            params:\n              price: {raw: {type: numberSet, value: \"\"}}\n            right: a\n"
 	if _, err := siqyaml.Decode([]byte(src)); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestAliases(t *testing.T) {
+	src := `
+name: x
+rounds:
+  - name: r
+    themes:
+      - name: t
+        questions:
+          - price: 100
+            params:
+              question: &q
+                - &img {image: a.jpg, wait: false}
+                - Text
+            right: a
+          - price: 200
+            params:
+              question: *q
+              answer:
+                - *img
+            right: b
+`
+	p, err := siqyaml.Decode([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	qs := p.Rounds[0].Themes[0].Questions
+	img := model.Item{Type: "image", Value: "a.jpg", IsRef: true, NoWait: true}
+	if !reflect.DeepEqual(qs[1].Params[0], qs[0].Params[0]) || !reflect.DeepEqual(qs[1].Params[1].Items, []model.Item{img}) {
+		t.Errorf("aliased values decode differently: %+v", qs)
+	}
+
+	for name, bad := range map[string]string{
+		"contains it|self-referencing alias": "name: x\nrounds: &r\n  - name: r\n    themes: *r\n",
+		"too large|billion laughs": "name: x\nl0: &l0 [a, a, a, a, a, a, a, a, a, a]\nl1: &l1 [*l0, *l0, *l0, *l0, *l0, *l0, *l0, *l0, *l0, *l0]\n" +
+			"l2: &l2 [*l1, *l1, *l1, *l1, *l1, *l1, *l1, *l1, *l1, *l1]\nl3: &l3 [*l2, *l2, *l2, *l2, *l2, *l2, *l2, *l2, *l2, *l2]\n" +
+			"l4: &l4 [*l3, *l3, *l3, *l3, *l3, *l3, *l3, *l3, *l3, *l3]\nl5: &l5 [*l4, *l4, *l4, *l4, *l4, *l4, *l4, *l4, *l4, *l4]\n" +
+			"l6: [*l5, *l5, *l5, *l5, *l5, *l5, *l5, *l5, *l5, *l5]\nrounds: []\n",
+	} {
+		done := make(chan error, 1)
+		go func() { _, err := siqyaml.Decode([]byte(bad)); done <- err }()
+		select {
+		case err := <-done:
+			want, _, _ := strings.Cut(name, "|")
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("%s: expected an error containing %q, got %v", name, want, err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: decoding did not finish", name)
+		}
 	}
 }

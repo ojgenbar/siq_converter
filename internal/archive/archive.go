@@ -315,43 +315,58 @@ func ReadDir(dir string) (*Bundle, error) {
 	if b.Package, err = siqyaml.Decode(data); err != nil {
 		return nil, fmt.Errorf("%s: %w", ContentYAML, err)
 	}
-	// WalkDir does not follow a symlinked root, so resolve it first.
-	if real, err := filepath.EvalSymlinks(dir); err == nil {
-		dir = real
-	}
-	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if p != dir && strings.HasPrefix(d.Name(), ".") {
-			if d.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if d.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, p)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
+	err = walkFiles(dir, "", nil, func(rel, src string, info fs.FileInfo) {
 		// Case-insensitive filesystems open "Content.yaml" as content.yaml.
 		if strings.EqualFold(rel, ContentYAML) || strings.EqualFold(rel, ContentXML) {
-			return nil
+			return
 		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		b.Files = append(b.Files, File{Path: rel, Src: p, Modified: info.ModTime()})
-		return nil
+		b.Files = append(b.Files, File{Path: rel, Src: src, Modified: info.ModTime()})
 	})
 	if err != nil {
 		return nil, err
 	}
 	return b, nil
+}
+
+// walkFiles calls fn for every regular file under dir, skipping hidden
+// entries. Unlike filepath.WalkDir it follows symlinks to folders (e.g. a
+// linked Images folder), keeping package-relative paths; ancestors holds the
+// folders being walked, to stop on a link that points back up the tree.
+func walkFiles(dir, rel string, ancestors []os.FileInfo, fn func(rel, src string, info fs.FileInfo)) error {
+	self, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	for _, a := range ancestors {
+		if os.SameFile(a, self) {
+			return fmt.Errorf("%s: folder link loops back to a parent folder", dir)
+		}
+	}
+	ancestors = append(ancestors, self)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		src := filepath.Join(dir, e.Name())
+		info, err := os.Stat(src) // follows links
+		if err != nil {
+			return err
+		}
+		childRel := path.Join(rel, e.Name())
+		switch {
+		case info.IsDir():
+			if err := walkFiles(src, childRel, ancestors, fn); err != nil {
+				return err
+			}
+		case info.Mode().IsRegular():
+			fn(childRel, src, info)
+		}
+	}
+	return nil
 }
 
 // WriteDir writes content.yaml and all files into dir, which must not exist or be empty.

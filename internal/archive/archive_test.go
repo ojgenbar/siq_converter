@@ -194,3 +194,29 @@ func TestReadDirIgnoresContentYAMLCasing(t *testing.T) {
 		t.Errorf("Content.yaml was packed as a package file: %v", b.Files)
 	}
 }
+
+func TestReadDirFollowsFolderLinks(t *testing.T) {
+	tmp := t.TempDir()
+	pkg := filepath.Join(tmp, "pkg")
+	shared := filepath.Join(tmp, "shared-images")
+	os.MkdirAll(pkg, 0o755)
+	os.MkdirAll(shared, 0o755)
+	os.WriteFile(filepath.Join(pkg, ContentYAML), []byte("name: x\nrounds: []\n"), 0o644)
+	os.WriteFile(filepath.Join(shared, "cat.jpg"), []byte("img"), 0o644)
+	if err := os.Symlink(shared, filepath.Join(pkg, "Images")); err != nil {
+		t.Skip("symlinks not supported:", err)
+	}
+	b, err := ReadDir(pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.Files) != 1 || b.Files[0].Path != "Images/cat.jpg" {
+		t.Fatalf("files = %+v", b.Files)
+	}
+
+	// A link back up the tree is reported instead of looping forever.
+	os.Symlink(pkg, filepath.Join(shared, "loop"))
+	if _, err := ReadDir(pkg); err == nil || !strings.Contains(err.Error(), "loops back") {
+		t.Errorf("expected a loop error, got %v", err)
+	}
+}

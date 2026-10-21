@@ -33,7 +33,10 @@ func Decode(data []byte) (*model.Package, error) {
 	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
 		return nil, fmt.Errorf("empty YAML document")
 	}
-	if err := checkChars(&doc); err != nil {
+	if _, err := resolveAliases(&doc, map[*yaml.Node]bool{}, map[*yaml.Node]int{}); err != nil {
+		return nil, err
+	}
+	if err := checkChars(&doc, map[*yaml.Node]bool{}); err != nil {
 		return nil, err
 	}
 	return decodePackage(doc.Content[0])
@@ -41,18 +44,59 @@ func Decode(data []byte) (*model.Package, error) {
 
 // checkChars rejects characters XML cannot hold (e.g. form feed from text
 // pasted out of a PDF): SIGame could not open a package containing them.
-func checkChars(n *yaml.Node) error {
+func checkChars(n *yaml.Node, seen map[*yaml.Node]bool) error {
+	if seen[n] {
+		return nil // shared through an alias, already checked
+	}
+	seen[n] = true
 	if n.Kind == yaml.ScalarNode {
 		if r, bad := model.InvalidXMLRune(n.Value); bad {
 			return errAt(n, "text contains the control character %U, which SIGame cannot read; remove it: %q", r, n.Value)
 		}
 	}
 	for _, c := range n.Content {
-		if err := checkChars(c); err != nil {
+		if err := checkChars(c, seen); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// maxExpandedNodes caps the document size after aliases are expanded, so a
+// few nested aliases cannot make a tiny file decode into a huge package.
+const maxExpandedNodes = 1_000_000
+
+// resolveAliases replaces every alias (*name) by the node it refers to, so
+// the decoder can treat a referenced mapping or list like a written-out one.
+// It rejects aliases that contain themselves and returns the expanded size.
+func resolveAliases(n *yaml.Node, active map[*yaml.Node]bool, size map[*yaml.Node]int) (int, error) {
+	if s, ok := size[n]; ok {
+		return s, nil
+	}
+	if active[n] {
+		return 0, errAt(n, "an alias refers to a value that contains it")
+	}
+	active[n] = true
+	defer delete(active, n)
+	total := 1
+	for i, c := range n.Content {
+		for steps := 0; c.Kind == yaml.AliasNode; steps++ {
+			if c.Alias == nil || steps > 100 {
+				return 0, errAt(c, "unresolvable alias")
+			}
+			c = c.Alias
+		}
+		n.Content[i] = c
+		s, err := resolveAliases(c, active, size)
+		if err != nil {
+			return 0, err
+		}
+		if total += s; total > maxExpandedNodes {
+			return 0, errAt(n, "the document is too large once aliases are expanded")
+		}
+	}
+	size[n] = total
+	return total, nil
 }
 
 func errAt(n *yaml.Node, format string, args ...any) error {

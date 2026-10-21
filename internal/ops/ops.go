@@ -69,7 +69,13 @@ func Unpack(in, out string, force bool) (*Result, error) {
 		return nil, err
 	}
 	replace := false
-	if entries, err := os.ReadDir(out); err == nil && len(entries) > 0 {
+	entries, err := os.ReadDir(out)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		// Without a listing we cannot tell whether the folder is empty, so
+		// never write into it (that could silently overwrite its files).
+		return nil, fmt.Errorf("%s: cannot list the output folder: %w", out, err)
+	}
+	if len(entries) > 0 {
 		if !force {
 			return nil, fmt.Errorf("%s: %w (folder is not empty)", out, ErrExists)
 		}

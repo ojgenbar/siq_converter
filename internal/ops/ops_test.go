@@ -263,3 +263,24 @@ func TestFailedRollbackReportsBackup(t *testing.T) {
 		t.Error("previous package is not in the reported backup folder")
 	}
 }
+
+func TestUnpackRefusesUnlistableFolder(t *testing.T) {
+	tmp := t.TempDir()
+	siq := minimalSIQ(t, tmp)
+	out := filepath.Join(tmp, "locked")
+	os.MkdirAll(out, 0o755)
+	yaml := filepath.Join(out, archive.ContentYAML)
+	os.WriteFile(yaml, []byte("my edits"), 0o644)
+	os.Chmod(out, 0o300) // can create and open files, but not list them
+	defer os.Chmod(out, 0o755)
+	if _, err := os.ReadDir(out); err == nil {
+		t.Skip("folder is still listable (running as root?)")
+	}
+	if _, err := Unpack(siq, out, false); err == nil || !strings.Contains(err.Error(), "cannot list") {
+		t.Errorf("expected a listing error, got %v", err)
+	}
+	os.Chmod(out, 0o755)
+	if data, _ := os.ReadFile(yaml); string(data) != "my edits" {
+		t.Error("existing content.yaml was overwritten")
+	}
+}
