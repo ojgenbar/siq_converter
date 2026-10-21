@@ -3,3 +3,4 @@
 *.siq
 /siqconv-ui
 /siqconv-ui.exe
+!/example/example_pack.siq

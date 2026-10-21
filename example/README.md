@@ -2,9 +2,11 @@
 
 `example_pack/` is a complete SIGame package in siq_converter's YAML form. It has one question of every type, every content item kind, and every answer type (select, number, point).
 
+`example_pack.siq` is the same package already packed, ready to open in SIGame. To rebuild it after editing the folder:
+
 ```sh
 go build -o siqconv ./cmd/siqconv
-./siqconv pack example/example_pack          # -> example/example_pack.siq, open it in SIGame
+./siqconv pack -f example/example_pack       # -> example/example_pack.siq
 ./siqconv verify example/example_pack.siq
 ```
 
