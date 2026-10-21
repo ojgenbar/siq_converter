@@ -10,7 +10,7 @@ Ready-made binaries are on the [Releases](../../releases) page:
 - `siqconv_*` is the command-line tool, for Linux, Windows and macOS (amd64 and arm64).
 - `siqconv-ui_*` is the desktop app, for Linux amd64, Windows amd64 and macOS (Intel and Apple Silicon).
 
-The macOS binaries are not signed. On first run, right-click the file and choose Open, or run
+The macOS binaries need macOS 12 or later and are not signed. On first run, right-click the file and choose Open, or run
 `xattr -d com.apple.quarantine siqconv-ui`.
 
 ## Build from source
