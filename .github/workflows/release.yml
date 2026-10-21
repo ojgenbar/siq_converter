@@ -1,0 +1,113 @@
+name: Release
+
+# Push a tag to publish a release: git tag v0.1.0 && git push origin v0.1.0
+# Running it by hand (Actions tab) only builds the archives as workflow artifacts.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  cli:
+    # siqconv is pure Go, so one Linux job cross-compiles every target.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: |
+          version=$([ "$GITHUB_REF_TYPE" = tag ] && echo "$GITHUB_REF_NAME" || echo "dev-${GITHUB_SHA::7}")
+          for target in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+            goos=${target%/*} goarch=${target#*/}
+            ext=$([ "$goos" = windows ] && echo .exe || true)
+            CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch go build -trimpath \
+              -ldflags "-s -w -X main.version=$version" -o "build/siqconv$ext" ./cmd/siqconv
+            .github/scripts/archive.sh "build/siqconv$ext" "siqconv_${version}_${goos}_${goarch}" "$goos"
+            rm -rf build
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: siqconv
+          path: dist/*
+
+  ui:
+    # siqconv-ui uses Fyne, which needs cgo, so it is built on each OS.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, goos: linux, goarch: amd64}
+          - {os: windows-latest, goos: windows, goarch: amd64}
+          - {os: macos-latest, goos: darwin, goarch: arm64}
+          - {os: macos-latest, goos: darwin, goarch: amd64, cc: clang -arch x86_64}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install Fyne build dependencies
+        if: matrix.goos == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
+      - name: Build
+        env:
+          CGO_ENABLED: '1'
+          GOARCH: ${{ matrix.goarch }}
+          CC: ${{ matrix.cc }}
+          MACOS_MIN: '12.0'
+        run: |
+          [ -n "$CC" ] || unset CC
+          version=$([ "$GITHUB_REF_TYPE" = tag ] && echo "$GITHUB_REF_NAME" || echo "dev-${GITHUB_SHA::7}")
+          ldflags="-s -w -X main.version=$version"
+          ext=
+          if [ "${{ matrix.goos }}" = windows ]; then
+            ext=.exe ldflags="$ldflags -H=windowsgui"
+          fi
+          if [ "${{ matrix.goos }}" = darwin ]; then
+            # Otherwise cgo targets the runner's macOS version. 12.0 is Go's minimum.
+            export MACOSX_DEPLOYMENT_TARGET=$MACOS_MIN
+            export CGO_CFLAGS="-O2 -g -mmacosx-version-min=$MACOS_MIN" CGO_LDFLAGS="-mmacosx-version-min=$MACOS_MIN"
+          fi
+          go build -trimpath -ldflags "$ldflags" -o "build/siqconv-ui$ext" ./cmd/siqconv-ui
+          if [ "${{ matrix.goos }}" = darwin ]; then
+            minos=$(otool -l build/siqconv-ui | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')
+            echo "minos $minos"
+            [ "$minos" = "$MACOS_MIN" ] || { echo "::error::expected minos $MACOS_MIN, got $minos"; exit 1; }
+          fi
+          .github/scripts/archive.sh "build/siqconv-ui$ext" "siqconv-ui_${version}_${{ matrix.goos }}_${{ matrix.goarch }}" "${{ matrix.goos }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: siqconv-ui-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+
+  release:
+    # Only a tag push publishes; a manual run, even on a tag, just builds.
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [cli, ui]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
+          flags=--generate-notes
+          [[ "$TAG" == *-* ]] && flags="$flags --prerelease"   # v1.0.0-rc1
+          gh release create "$TAG" * --repo "$GITHUB_REPOSITORY" --verify-tag $flags

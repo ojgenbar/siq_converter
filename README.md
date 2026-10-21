@@ -4,6 +4,17 @@ Simple SIQ (SI game questions) to Yaml and back converter
 `siqconv` turns a SIGame question package (`.siq`, format version 5) into a folder with a human-editable
 `content.yaml` plus media files, and packs such a folder back into a `.siq`.
 
+## Download
+
+Ready-made binaries are on the [Releases](../../releases) page:
+- `siqconv_*` is the command-line tool, for Linux, Windows and macOS (amd64 and arm64).
+- `siqconv-ui_*` is the desktop app, for Linux amd64, Windows amd64 and macOS (Intel and Apple Silicon).
+
+The macOS binaries need macOS 12 or later and are not signed. On first run, right-click the file and choose Open, or run
+`xattr -d com.apple.quarantine siqconv-ui`.
+
+## Build from source
+
 ```sh
 go build -o siqconv ./cmd/siqconv
 
@@ -182,3 +193,13 @@ Unknown keys in YAML and unknown elements or attributes in `content.xml` are err
 go test ./...
 go test ./internal/siqyaml -update    # regenerate testdata/full.yaml after intentional format changes
 ```
+
+### Releases
+
+CI runs `go vet` and the tests on every push to `main` and on every pull request. To publish a release, push a version tag:
+
+```sh
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+The `Release` workflow builds `siqconv` for every target and `siqconv-ui` on each OS, because Fyne needs cgo. It then attaches the archives and a `SHA256SUMS` file to a GitHub release. A tag with a suffix such as `v0.2.0-rc1` is published as a pre-release. Running the workflow by hand from the Actions tab only builds the archives, as workflow artifacts. `siqconv version` and the window title show the version.
