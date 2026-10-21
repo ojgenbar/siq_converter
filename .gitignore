@@ -1,0 +1,6 @@
+/siqconv
+/siqconv.exe
+*.siq
+/siqconv-ui
+/siqconv-ui.exe
+!/example/example_pack.siq
